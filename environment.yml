@@ -6,6 +6,7 @@ dependencies:
   - python=3.10
   - pip  # Bắt buộc phải cài pip để chạy phần dưới
   
+  - pandoc
   # R Core
   - r-base=4.3.3
   
