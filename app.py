@@ -257,7 +257,7 @@ Requirements:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "You are an R debugging expert. Fix the code and return ONLY the corrected R code."},
                 {"role": "user", "content": fix_prompt}
