@@ -1,0 +1,6 @@
+r-ggplot2
+r-dplyr
+r-gtsummary
+r-survival
+r-survminer
+r-flextable
