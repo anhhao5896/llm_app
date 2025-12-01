@@ -2,14 +2,14 @@ name: streamlit-r-env
 channels:
   - conda-forge
 dependencies:
-  # Cài Python nền và Pip (bắt buộc để chạy requirements.txt sau này)
+  # --- PHẦN 1: HỆ THỐNG & R (Cài bằng Conda) ---
   - python=3.10
-  - pip
+  - pip  # Bắt buộc phải cài pip để chạy phần dưới
   
   # R Core
   - r-base=4.3.1
   
-  # Các thư viện R (Binary từ conda-forge)
+  # R Packages (Binary siêu tốc)
   - r-ggplot2
   - r-dplyr
   - r-gtsummary
@@ -19,3 +19,10 @@ dependencies:
   - r-remotes
   - r-systemfonts
   - r-textshaping
+  
+  # --- PHẦN 2: THƯ VIỆN PYTHON (Cài bằng PIP) ---
+  # Cài bằng pip sẽ đảm bảo không bao giờ bị lỗi ModuleNotfound
+  - pip:
+    - streamlit
+    - pandas
+    - openai
