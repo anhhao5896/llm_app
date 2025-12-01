@@ -10,3 +10,4 @@ libfreetype6-dev
 libpng-dev
 libtiff5-dev
 libjpeg-dev
+cmake
