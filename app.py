@@ -10,7 +10,7 @@ import base64
 from io import BytesIO
 import json
 import re
-
+import sys
 
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
