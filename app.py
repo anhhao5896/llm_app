@@ -11,7 +11,7 @@ from io import BytesIO
 import json
 import re
 
-# Install R packages on first run
+# Helper function to run R code with auto package installation
 def run_r_code(code, df, output_dir):
     """Execute R code and return results"""
     # Save dataframe to temp CSV for R to read
@@ -66,12 +66,12 @@ df <- read.csv("{csv_path_r}")
         f.write(r_script)
     
     try:
-        # Run R script
+        # Run R script with longer timeout for package installation
         result = subprocess.run(
             ['Rscript', script_path],
             capture_output=True,
             text=True,
-            timeout=120,  # Tăng timeout lên 120s cho việc install packages
+            timeout=180,  # 3 minutes timeout for package installation
             cwd=output_dir
         )
         
@@ -86,7 +86,7 @@ df <- read.csv("{csv_path_r}")
         return {
             'success': False,
             'stdout': '',
-            'stderr': 'Execution timed out (120s limit). This may happen during first run while installing R packages.',
+            'stderr': 'Execution timed out (180s limit). This may happen during first run while installing R packages.',
             'output_dir': output_dir,
             'code': code
         }
@@ -106,6 +106,7 @@ df <- read.csv("{csv_path_r}")
             'output_dir': output_dir,
             'code': code
         }
+
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
     page_icon="📊",
@@ -114,94 +115,6 @@ st.set_page_config(
 
 # Initialize OpenAI client
 client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# Helper function to fix common R path issues
-def fix_r_code(code, error_msg):
-    """Attempt to fix common R code errors"""
-    fixed_code = code
-    
-    # Fix Windows path issues (backslashes)
-    if "\\U" in error_msg or "\\u" in error_msg or "used without hex digits" in error_msg:
-        # Replace single backslashes with forward slashes or double backslashes
-        import re
-        # This shouldn't happen in our generated code, but just in case
-        fixed_code = fixed_code.replace("\\", "/")
-    
-    return fixed_code
-
-# Helper function to run R code
-def run_r_code(code, df, output_dir):
-    """Execute R code and return results"""
-    # Save dataframe to temp CSV for R to read
-    csv_path = os.path.join(output_dir, "temp_data.csv")
-    df.to_csv(csv_path, index=False)
-    
-    # Normalize path for R (use forward slashes)
-    csv_path_r = csv_path.replace("\\", "/")
-    
-    # Create R script with data loading
-    r_script = f"""
-# Load data
-df <- read.csv("{csv_path_r}")
-
-# Load required libraries
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(gtsummary))
-suppressPackageStartupMessages(library(survival))
-suppressPackageStartupMessages(library(survminer))
-suppressPackageStartupMessages(library(flextable))
-
-# User code
-{code}
-"""
-    
-    # Save R script
-    script_path = os.path.join(output_dir, "script.R")
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(r_script)
-    
-    try:
-        # Run R script
-        result = subprocess.run(
-            ['Rscript', script_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=output_dir
-        )
-        
-        return {
-            'success': result.returncode == 0,
-            'stdout': result.stdout,
-            'stderr': result.stderr,
-            'output_dir': output_dir,
-            'code': code
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            'success': False,
-            'stdout': '',
-            'stderr': 'Execution timed out (30s limit)',
-            'output_dir': output_dir,
-            'code': code
-        }
-    except FileNotFoundError:
-        return {
-            'success': False,
-            'stdout': '',
-            'stderr': 'R is not installed or not in PATH. Please install R from https://www.r-project.org/',
-            'output_dir': output_dir,
-            'code': code
-        }
-    except Exception as e:
-        return {
-            'success': False,
-            'stdout': '',
-            'stderr': str(e),
-            'output_dir': output_dir,
-            'code': code
-        }
 
 # Helper function to extract HTML tables from R output
 def extract_html_from_output(output_dir):
@@ -216,16 +129,13 @@ def extract_html_from_output(output_dir):
                 html_content = f.read()
                 
                 # Extract style and table content from the full HTML
-                # gtsave creates a complete HTML document, we need just the table part
                 style_match = re.search(r'<style>(.*?)</style>', html_content, re.DOTALL)
                 table_match = re.search(r'<div id="[^"]*"[^>]*>.*?<table.*?</table>.*?</div>', html_content, re.DOTALL)
                 
                 if style_match and table_match:
-                    # Combine style and table
                     clean_html = f"<style>{style_match.group(1)}</style>\n{table_match.group(0)}"
                     html_files.append(clean_html)
                 else:
-                    # Fallback: use the full HTML content
                     html_files.append(html_content)
     
     return html_files
@@ -252,11 +162,9 @@ Requirements:
 - Use forward slashes (/) for any file paths
 - Ensure all column names are correctly referenced
 - The dataframe is called 'df'
-- Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
-- For Kaplan-Meier plots, MUST load library(survminer) before using ggsurvplot()
-- For ggsurvplot objects, save using: ggsave("plot.png", p$plot, width=10, height=6)
-- For gtsummary tables, use correct syntax: as_flex_table(table) %>% save_as_html(path = "table.html")
-- IMPORTANT: Always use pipe operator (%>%) and path parameter in save_as_html()
+- Libraries will be auto-installed if needed: ggplot2, dplyr, gtsummary, survival, survminer, flextable
+- For Kaplan-Meier plots, MUST use ggsurvplot() and save with: ggsave("plot.png", p$plot, width=10, height=6)
+- For gtsummary tables, use: as_flex_table(table) %>% save_as_html(path = "table.html")
 """
     
     try:
@@ -416,7 +324,6 @@ def export_conversation():
         if msg["role"] == "user":
             html_content += f'<div class="question"><strong>❓ Question {idx//2 + 1}:</strong> {msg["content"]}</div>'
         else:
-            # Add auto-fix badge if applicable
             fix_badge = ""
             if "fixed" in msg and msg["fixed"]:
                 fix_badge = f'<span class="auto-fix-badge">✨ Auto-fixed after {msg["retries"]} attempt(s)</span>'
@@ -424,7 +331,6 @@ def export_conversation():
             content = msg["content"].replace("```r", "<pre><code class='language-r'>").replace("```", "</code></pre>")
             html_content += f'<div class="answer"><strong>💡 Analysis:</strong>{fix_badge}<br><br>{content}'
             
-            # Add text output if exists
             if "output" in msg and msg["output"]:
                 html_content += f'''
                 <div class="output-section">
@@ -433,10 +339,8 @@ def export_conversation():
                 </div>
                 '''
             
-            # Add executed R code if exists
             if "code" in msg:
                 code_label = "📝 Executed R Code" if "error" not in msg else "⚠️ Failed R Code"
-                code_class = "success" if "error" not in msg else "error"
                 html_content += f'''
                 <div class="output-section">
                     <div class="output-label">{code_label}:</div>
@@ -444,7 +348,6 @@ def export_conversation():
                 </div>
                 '''
                 
-                # Show error if exists
                 if "error" in msg:
                     html_content += f'''
                     <div class="output-section" style="background-color: #ffebee;">
@@ -453,7 +356,6 @@ def export_conversation():
                     </div>
                     '''
             
-            # Add HTML tables if exists
             if "html_tables" in msg and msg["html_tables"]:
                 html_content += '<div class="table-container">'
                 html_content += '<div class="output-label">📊 Table Results:</div>'
@@ -461,7 +363,6 @@ def export_conversation():
                     html_content += table_html
                 html_content += '</div>'
             
-            # Add plot images if exists (convert to base64)
             if "plot_images" in msg and msg["plot_images"]:
                 html_content += '<div class="output-label">📈 Visualizations:</div>'
                 for img_path in msg["plot_images"]:
@@ -475,7 +376,7 @@ def export_conversation():
     html_content += """
     <hr style="margin-top: 40px;">
     <p class="metadata" style="text-align: center;">
-        Generated by Ask Your CSV (R Edition) | Powered by R, ggplot2, gtsummary, and flextable
+        Generated by Ask Your CSV (R Edition) | Powered by R and GPT-4
     </p>
     </body>
     </html>
@@ -557,12 +458,10 @@ if st.session_state.df is not None:
             if "fixed" in msg and msg["fixed"]:
                 st.caption(f"✨ Auto-fixed after {msg['retries']} attempt(s)")
             
-            # Show executed code for successful runs
             if "code" in msg and "error" not in msg:
                 st.subheader("📝 Executed R Code", divider="green")
                 st.code(msg["code"], language="r")
             
-            # Show failed code
             if "code" in msg and "error" in msg:
                 st.subheader("⚠️ Failed R Code", divider="red")
                 st.code(msg["code"], language="r")
@@ -624,72 +523,34 @@ if st.session_state.df is not None:
         
         When writing code:
         - The dataframe is available as 'df'
-        - Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
-        - For survival plots, MUST load survminer: library(survminer) before using ggsurvplot()
-        - For plots, save them using: ggsave("plot.png", width=10, height=6)
+        - Libraries will be auto-installed: ggplot2, dplyr, gtsummary, survival, survminer, flextable
+        - For survival plots, use survminer: ggsurvplot()
+        - For plots, save using: ggsave("plot.png", width=10, height=6)
         - For ggsurvplot, save using: ggsave("plot.png", p$plot, width=10, height=6)
         - You can create multiple plots: plot1.png, plot2.png, etc.
-        - For gtsummary tables, MUST save as HTML using flextable with pipe operator:
-          table <- tbl_regression(model, exponentiate = TRUE)
-          as_flex_table(table) %>% save_as_html(path = "table.html")
-        - IMPORTANT: Use pipe operator (%>%) and path parameter in save_as_html()
+        - For gtsummary tables, save as HTML: as_flex_table(table) %>% save_as_html(path = "table.html")
         - Always add titles and labels to plots
         - Print results using print() or cat()
         
-        Example code structure for tables:
+        Example for tables:
         ```r
-        # Cox regression model
         library(survival)
         library(gtsummary)
         library(flextable)
         
         model <- coxph(Surv(time, status) ~ age + sex, data = df)
-        
-        # Create and save table as HTML (CORRECT SYNTAX)
         table <- tbl_regression(model, exponentiate = TRUE)
         as_flex_table(table) %>% save_as_html(path = "table.html")
-        
-        # For summary tables
-        summary_table <- tbl_summary(df, by = group_var)
-        as_flex_table(summary_table) %>% save_as_html(path = "summary.html")
-        
-        # Alternative syntax also works:
-        # save_as_html(as_flex_table(table), path = "table.html")
         ```
         
-        Example for Kaplan-Meier plots:
+        Example for KM plots:
         ```r
-        # Kaplan-Meier survival analysis
         library(survival)
         library(survminer)
         
-        # Fit survival model
         km_fit <- survfit(Surv(time, status) ~ treatment, data = df)
-        
-        # Create plot with ggsurvplot
-        p <- ggsurvplot(
-          km_fit,
-          data = df,
-          risk.table = TRUE,
-          pval = TRUE,
-          conf.int = TRUE,
-          xlab = "Time",
-          ylab = "Survival Probability",
-          title = "Kaplan-Meier Curves"
-        )
-        
-        # Save plot (note: use p$plot for ggsurvplot objects)
+        p <- ggsurvplot(km_fit, data = df, risk.table = TRUE, pval = TRUE)
         ggsave("km_plot.png", p$plot, width = 10, height = 6)
-        ```
-        
-        Example for plots:
-        ```r
-        # Visualization
-        p <- ggplot(df, aes(x=x, y=y)) + 
-          geom_point() +
-          labs(title="My Plot", x="X axis", y="Y axis")
-        
-        ggsave("plot.png", p, width=10, height=6)
         ```
         """
         
@@ -728,7 +589,8 @@ if st.session_state.df is not None:
                             # Create temp directory for this execution
                             with tempfile.TemporaryDirectory() as tmpdir:
                                 # First attempt
-                                result = run_r_code(code, df, tmpdir)
+                                with st.spinner("🔄 Installing R packages and executing code (this may take a few minutes on first run)..."):
+                                    result = run_r_code(code, df, tmpdir)
                                 
                                 # If failed, try to auto-fix (max 3 retries)
                                 max_retries = 3
@@ -738,7 +600,6 @@ if st.session_state.df is not None:
                                     retry_count += 1
                                     st.warning(f"⚠️ Execution failed. Auto-fixing code (Attempt {retry_count}/{max_retries})...")
                                     
-                                    # Get fixed code from AI
                                     fixed_code = get_fixed_r_code(
                                         result['code'], 
                                         result['stderr'], 
@@ -753,34 +614,27 @@ if st.session_state.df is not None:
                                         break
                                 
                                 if result['success']:
-                                    # Display success message if retries were needed
                                     if retry_count > 0:
                                         st.success(f"✅ Code executed successfully after {retry_count} fix attempt(s)!")
                                     
-                                    # Show the executed code
                                     st.subheader("📝 Executed R Code", divider="green")
                                     st.code(result['code'], language="r")
                                     
-                                    # Display text output
                                     if result['stdout']:
                                         st.success("R Output:")
                                         st.text(result['stdout'])
                                     
-                                    # Extract and display HTML tables
                                     html_tables = extract_html_from_output(tmpdir)
                                     if html_tables:
                                         st.success("📊 Table Output:")
                                     for html_content in html_tables:
-                                        # Use a container with custom styling for better display
                                         st.markdown(html_content, unsafe_allow_html=True)
                                     
-                                    # Look for saved plots
                                     plot_files = [f for f in os.listdir(tmpdir) if f.endswith('.png')]
                                     saved_plots = []
                                     
                                     for plot_file in plot_files:
                                         plot_path = os.path.join(tmpdir, plot_file)
-                                        # Save to permanent location
                                         perm_dir = tempfile.mkdtemp()
                                         perm_path = os.path.join(perm_dir, plot_file)
                                         
@@ -790,7 +644,6 @@ if st.session_state.df is not None:
                                         st.image(perm_path)
                                         saved_plots.append(perm_path)
                                     
-                                    # Save to session state
                                     msg_data = {"role": "assistant", "content": reply}
                                     if result['stdout']:
                                         msg_data["output"] = result['stdout']
@@ -801,14 +654,13 @@ if st.session_state.df is not None:
                                     if retry_count > 0:
                                         msg_data["fixed"] = True
                                         msg_data["retries"] = retry_count
-                                    msg_data["code"] = result['code']  # Save code to session state
+                                    msg_data["code"] = result['code']
                                     
                                     st.session_state.messages.append(msg_data)
                                 else:
                                     st.error(f"❌ R Execution Error (failed after {retry_count} fix attempt(s)):")
                                     st.code(result['stderr'], language="text")
                                     
-                                    # Show the code that failed with subheader
                                     st.subheader("⚠️ Failed R Code", divider="red")
                                     st.code(result['code'], language="r")
                                     
@@ -817,7 +669,7 @@ if st.session_state.df is not None:
                                     st.session_state.messages.append({
                                         "role": "assistant",
                                         "content": reply,
-                                        "code": result['code'],  # Save failed code too
+                                        "code": result['code'],
                                         "error": result['stderr']
                                     })
                     else:
@@ -850,6 +702,6 @@ st.markdown("""
 <div style='text-align: center; color: gray; font-size: 12px;'>
 💡 Powered by R, ggplot2, gtsummary, survminer, and flextable | 
 🔒 Your data stays private and is not stored |
-⚙️ Requires R and packages (ggplot2, dplyr, gtsummary, survival, survminer, flextable) installed
+⚙️ R packages are auto-installed on first use (may take 2-3 minutes)
 </div>
 """, unsafe_allow_html=True)
