@@ -1,7 +1,4 @@
-# Tạo thư mục thư viện riêng nếu chưa có
-if (!dir.exists("r_libs")) {
-  dir.create("r_libs")
-}
-
-# Ép R sử dụng thư mục này làm nơi chứa thư viện
-.libPaths(c("r_libs", .libPaths()))
+# .Rprofile
+lib_dir <- "r_libs"
+if (!dir.exists(lib_dir)) dir.create(lib_dir)
+.libPaths(c(lib_dir, .libPaths()))
