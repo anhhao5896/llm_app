@@ -1,25 +1,28 @@
-# 1. Cấu hình Repo Binary (Debian Bookworm) để cài siêu tốc
+# install_r_packages.R
+
+# 1. Dùng Repo Binary cho Debian Bookworm (Linux) -> Cài siêu nhanh
 options(repos = c(CRAN = "https://packagemanager.posit.co/cran/__linux__/bookworm/latest"))
 
-# 2. Đảm bảo R nhận diện thư mục cục bộ (dù đã có .Rprofile, khai báo lại cho chắc chắn)
+# 2. Thiết lập thư mục cài đặt cục bộ (tránh lỗi Permission)
 lib_dir <- "r_libs"
 if (!dir.exists(lib_dir)) dir.create(lib_dir)
 .libPaths(c(lib_dir, .libPaths()))
 
-# 3. Danh sách gói cần cài
+# 3. Danh sách gói
 packages <- c("ggplot2", "dplyr", "gtsummary", "survival", "survminer", "flextable")
 
-# 4. Hàm cài đặt an toàn
+# 4. Cài đặt thông minh (chỉ cài cái thiếu)
 install_if_missing <- function(pkgs) {
-  # Chỉ cài những gói chưa có trong thư mục r_libs
-  new_pkgs <- pkgs[!(pkgs %in% installed.packages(lib.loc = lib_dir)[,"Package"])]
+  # Kiểm tra trong thư mục cục bộ
+  installed_pkgs <- installed.packages(lib.loc = lib_dir)[,"Package"]
+  new_pkgs <- pkgs[!(pkgs %in% installed_pkgs)]
   
   if(length(new_pkgs)) {
-    message("Installing packages to local dir: ", lib_dir)
-    # QUAN TRỌNG: Tham số 'lib' buộc R cài vào thư mục cục bộ
+    message("Installing: ", paste(new_pkgs, collapse = ", "))
+    # Cài vào thư mục r_libs, dùng 4 luồng CPU
     install.packages(new_pkgs, lib = lib_dir, Ncpus = 4)
   } else {
-    message("All packages already installed.")
+    message("All packages are ready.")
   }
 }
 
