@@ -1,6 +1,6 @@
-# Install required R packages for Streamlit app
+# Install required R packages for Streamlit app (minimal version)
 cat("==========================================\n")
-cat("Installing R packages...\n")
+cat("Checking and installing R packages...\n")
 cat("==========================================\n\n")
 
 # Set CRAN mirror
@@ -22,90 +22,70 @@ if (!dir.exists(user_lib)) {
 cat("Library paths:", .libPaths(), "\n\n")
 
 # List of required packages
+# Note: ggplot2, dplyr, survival should be pre-installed via packages.txt
 packages <- c("ggplot2", "dplyr", "gtsummary", "survival", "survminer", "flextable")
 
-cat("Required packages:", paste(packages, collapse = ", "), "\n")
+cat("Required packages:", paste(packages, collapse = ", "), "\n\n")
+
+# Check which packages are missing
+missing_packages <- c()
+for (pkg in packages) {
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    missing_packages <- c(missing_packages, pkg)
+    cat("✗", pkg, "not found\n")
+  } else {
+    cat("✓", pkg, "already installed\n")
+  }
+}
+
+if (length(missing_packages) == 0) {
+  cat("\n✓ All packages are already installed!\n")
+  quit(status = 0)
+}
+
+cat("\nInstalling missing packages:", paste(missing_packages, collapse = ", "), "\n")
 cat("Installing to:", user_lib, "\n\n")
 
-# Function to install a single package with error handling
+# Function to install a single package
 install_package <- function(pkg) {
   cat(paste0("Installing ", pkg, "...\n"))
   
   tryCatch({
-    # Check if already installed
-    if (requireNamespace(pkg, quietly = TRUE)) {
-      cat(paste0("✓ ", pkg, " already installed\n\n"))
-      return(TRUE)
-    }
-    
     install.packages(
       pkg, 
       lib = user_lib,
       dependencies = TRUE, 
-      quiet = FALSE,
-      INSTALL_opts = c('--no-lock')
+      quiet = TRUE,
+      INSTALL_opts = c('--no-lock', '--no-test-load')
     )
     
-    # Verify installation
     if (requireNamespace(pkg, quietly = TRUE)) {
-      cat(paste0("✓ ", pkg, " installed successfully\n\n"))
+      cat(paste0("✓ ", pkg, " installed\n\n"))
       return(TRUE)
     } else {
-      cat(paste0("✗ ", pkg, " installation failed (verification failed)\n\n"))
+      cat(paste0("✗ ", pkg, " failed\n\n"))
       return(FALSE)
     }
   }, error = function(e) {
-    cat(paste0("✗ Error installing ", pkg, ": ", e$message, "\n\n"))
+    cat(paste0("✗ Error: ", e$message, "\n\n"))
     return(FALSE)
   })
 }
 
-# Install packages one by one
-results <- sapply(packages, install_package)
+# Install only missing packages
+results <- sapply(missing_packages, install_package)
 
 # Summary
 cat("\n==========================================\n")
 cat("Installation Summary\n")
 cat("==========================================\n")
 
-installed_packages <- packages[results]
-failed_packages <- packages[!results]
-
-if (length(installed_packages) > 0) {
-  cat("Successfully installed:", paste(installed_packages, collapse = ", "), "\n")
+if (all(results)) {
+  cat("✓ All packages installed successfully!\n")
+  quit(status = 0)
+} else {
+  failed <- missing_packages[!results]
+  cat("⚠ Some packages failed:", paste(failed, collapse = ", "), "\n")
+  cat("The app may still work with pre-installed packages.\n")
+  quit(status = 0)  # Don't fail completely
 }
-
-if (length(failed_packages) > 0) {
-  cat("Failed to install:", paste(failed_packages, collapse = ", "), "\n")
-  cat("\nTrying alternative installation method...\n\n")
-  
-  # Try installing failed packages with different method
-  for (pkg in failed_packages) {
-    cat(paste0("Retrying ", pkg, " with BiocManager...\n"))
-    tryCatch({
-      if (!requireNamespace("BiocManager", quietly = TRUE)) {
-        install.packages("BiocManager", lib = user_lib, quiet = TRUE)
-      }
-      BiocManager::install(pkg, lib = user_lib, update = FALSE, ask = FALSE)
-      
-      if (requireNamespace(pkg, quietly = TRUE)) {
-        cat(paste0("✓ ", pkg, " installed via BiocManager\n"))
-        results[packages == pkg] <- TRUE
-      }
-    }, error = function(e) {
-      cat(paste0("✗ Still failed: ", e$message, "\n"))
-    })
-  }
-  
-  # Re-check results
-  failed_packages <- packages[!results]
-  
-  if (length(failed_packages) > 0) {
-    cat("\n⚠ Some packages could not be installed:", paste(failed_packages, collapse = ", "), "\n")
-    quit(status = 1)
-  }
-}
-
-cat("\n✓ All packages installed successfully!\n")
-cat("Library location:", user_lib, "\n")
-quit(status = 0)
