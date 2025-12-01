@@ -37,12 +37,20 @@ def run_r_code(code, df, output_dir):
         libraries_needed.append('flextable')
     
     # Create library installation and loading code
-    library_code = ""
+    library_code = """
+# Set user library path
+user_lib <- Sys.getenv("R_LIBS_USER")
+if (!dir.exists(user_lib)) {
+    dir.create(user_lib, recursive = TRUE)
+}
+.libPaths(c(user_lib, .libPaths()))
+"""
+    
     for lib in set(libraries_needed):
         library_code += f"""
 if (!require("{lib}", quietly = TRUE)) {{
-    install.packages("{lib}", repos = "http://cran.rstudio.com/", quiet = TRUE)
-    library({lib})
+    install.packages("{lib}", repos = "https://cloud.r-project.org/", lib = user_lib, quiet = TRUE, dependencies = TRUE)
+    library({lib}, lib.loc = user_lib)
 }} else {{
     suppressPackageStartupMessages(library({lib}))
 }}
