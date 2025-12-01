@@ -36,67 +36,104 @@ def fix_r_code(code, error_msg):
     return fixed_code
 
 # Helper function to run R code
+# --- CẬP NHẬT ĐOẠN NÀY TRONG APP.PY ---
+
+def find_r_executable():
+    """
+    Tìm đường dẫn Rscript dựa trên vị trí của Python hiện tại.
+    Nguyên lý: Trong Conda, Python và R nằm cùng thư mục 'bin'.
+    """
+    # 1. Lấy đường dẫn thư mục 'bin' của Python hiện tại
+    # Ví dụ: /home/adminuser/.conda/envs/app/bin
+    python_dir = os.path.dirname(sys.executable)
+    
+    # 2. Suy luận đường dẫn Rscript
+    r_path_candidate = os.path.join(python_dir, "Rscript")
+    
+    # 3. Kiểm tra xem file có tồn tại và chạy được không
+    if os.path.exists(r_path_candidate):
+        return r_path_candidate
+        
+    # 4. Fallback: Nếu không thấy, thử các đường dẫn cứng (dự phòng)
+    fallback_paths = [
+        "/usr/local/bin/Rscript",
+        "/usr/bin/Rscript"
+    ]
+    for path in fallback_paths:
+        if os.path.exists(path):
+            return path
+            
+    return None
+
+def check_r_environment():
+    """Kiểm tra và cấu hình đường dẫn R"""
+    # Tìm đường dẫn tuyệt đối
+    r_path = find_r_executable()
+    
+    if r_path:
+        # Lưu vào session để dùng lại
+        st.session_state['r_path'] = r_path
+        
+        try:
+            # Thử chạy lệnh version
+            result = subprocess.run(
+                [r_path, '--version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return True, result.stderr
+        except Exception as e:
+            return False, f"Found at {r_path} but failed to run: {str(e)}"
+    else:
+        # Debug: In ra nơi Python đang chạy để biết đường mà sửa
+        return False, f"Could not find Rscript. Python is running at: {sys.executable}"
+
 def run_r_code(code, df, output_dir):
-    """Execute R code and return results"""
-    # Save dataframe to temp CSV for R to read
+    # ... (Phần lưu file CSV giữ nguyên) ...
     csv_path = os.path.join(output_dir, "temp_data.csv")
     df.to_csv(csv_path, index=False)
-    
-    # Normalize path for R (use forward slashes)
     csv_path_r = csv_path.replace("\\", "/")
+    output_dir_r = output_dir.replace("\\", "/")
     
-    # Create R script with data loading
+    # ... (Phần tạo script R giữ nguyên) ...
     r_script = f"""
-# Load data
-df <- read.csv("{csv_path_r}")
-
-# Load required libraries
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(gtsummary))
-suppressPackageStartupMessages(library(survival))
-suppressPackageStartupMessages(library(survminer))
-suppressPackageStartupMessages(library(flextable))
-
-# User code
-{code}
-"""
-    
-    # Save R script
+    setwd("{output_dir_r}")
+    df <- read.csv("{csv_path_r}")
+    suppressPackageStartupMessages({{
+        library(ggplot2)
+        library(dplyr)
+        library(gtsummary)
+        library(survival)
+        library(survminer)
+        library(flextable)
+    }})
+    {code}
+    """
     script_path = os.path.join(output_dir, "script.R")
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write(r_script)
     
+    # --- QUAN TRỌNG: DÙNG ĐƯỜNG DẪN TUYỆT ĐỐI ---
+    r_exec = st.session_state.get('r_path')
+    
+    # Nếu chưa tìm thấy R (lỗi logic), thử fallback về 'Rscript' thường
+    if not r_exec: 
+        r_exec = 'Rscript'
+    
     try:
-        # Run R script
         result = subprocess.run(
-            ['Rscript', script_path],
+            [r_exec, script_path], # <--- Gọi bằng đường dẫn đầy đủ
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
             cwd=output_dir
         )
-        
+        # ... (Phần return giữ nguyên) ...
         return {
             'success': result.returncode == 0,
             'stdout': result.stdout,
             'stderr': result.stderr,
-            'output_dir': output_dir,
-            'code': code
-        }
-    except subprocess.TimeoutExpired:
-        return {
-            'success': False,
-            'stdout': '',
-            'stderr': 'Execution timed out (30s limit)',
-            'output_dir': output_dir,
-            'code': code
-        }
-    except FileNotFoundError:
-        return {
-            'success': False,
-            'stdout': '',
-            'stderr': 'R is not installed or not in PATH. Please install R from https://www.r-project.org/',
             'output_dir': output_dir,
             'code': code
         }
