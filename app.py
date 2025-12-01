@@ -102,7 +102,7 @@ install.packages(packages, repos = "https://cloud.r-project.org/", quiet = TRUE)
             ['Rscript', script_path],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minutes for installation
+            timeout=900  # 15 minutes for installation
         )
         
         os.unlink(script_path)
