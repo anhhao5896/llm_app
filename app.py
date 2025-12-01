@@ -1,3 +1,55 @@
+import streamlit as st import pandas as pd import openai import subprocess import tempfile import os import warnings import datetime import base64 from io import BytesIO import json import re st.set_page_config( page_title="Ask Your CSV (R Edition)", page_icon="📊", la
+
+pasted
+
+sử dụng code này khi deploy streamlit app, không chạy được R code thì thiếu library
+
+Khi deploy Streamlit app lên cloud (như Streamlit Cloud, Heroku, etc.), bạn cần đảm bảo R và các package R được cài đặt. Dưới đây là hướng dẫn chi tiết:
+
+1. Tạo file packages.txt (cho Streamlit Cloud)
+txt
+r-base
+r-base-dev
+2. Tạo file install_r_packages.R
+r
+# Install required R packages
+install.packages(c(
+  "ggplot2",
+  "dplyr",
+  "gtsummary",
+  "survival",
+  "survminer",
+  "flextable"
+), repos = "https://cloud.r-project.org/")
+3. Tạo file requirements.txt
+txt
+streamlit
+pandas
+openai
+4. Tạo file setup.sh (nếu cần)
+bash
+#!/bin/bash
+
+# Install R packages
+Rscript install_r_packages.R
+5. Cập nhật code để kiểm tra và hướng dẫn cài đặt
+Tôi sẽ tạo phiên bản cải tiến của app với khả năng kiểm tra dependencies tốt hơn:
+
+Continue
+
+Streamlit CSV Analyzer with R - Enhanced Deployment
+Code 
+
+
+How can I help you today?
+
+Session limit reached ∙ resets 12:00 AM
+Upgrade
+
+
+
+
+
 import streamlit as st
 import pandas as pd
 import openai
@@ -10,36 +62,8 @@ import base64
 from io import BytesIO
 import json
 import re
+import sys
 
-# Install R packages on first run
-def install_r_packages():
-    """Install required R packages on first run"""
-    packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
-    
-    for pkg in packages:
-        try:
-            check_cmd = f'Rscript -e "if (!require(\'{pkg}\', quietly=TRUE)) quit(status=1)"'
-            result = subprocess.run(check_cmd, shell=True, capture_output=True)
-            
-            if result.returncode != 0:
-                st.info(f"Installing R package: {pkg}...")
-                install_cmd = f'Rscript -e "install.packages(\'{pkg}\', repos=\'http://cran.rstudio.com/\', quiet=TRUE)"'
-                subprocess.run(install_cmd, shell=True, check=True, timeout=300)
-        except Exception as e:
-            st.warning(f"Could not install {pkg}: {str(e)}")
-
-# Check and install R packages before setting page config
-if 'r_packages_checked' not in st.session_state:
-    st.session_state.r_packages_checked = False
-
-if not st.session_state.r_packages_checked:
-    # Create a temporary container for installation messages
-    placeholder = st.empty()
-    with placeholder.container():
-        st.info("⏳ Setting up R environment... This may take 2-3 minutes on first deployment.")
-        install_r_packages()
-    placeholder.empty()
-    st.session_state.r_packages_checked = True
 
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
@@ -47,8 +71,100 @@ st.set_page_config(
     layout="wide"
 )
 
+# Check R installation and packages
+def check_r_installation():
+    """Check if R is installed and return version info"""
+    try:
+        result = subprocess.run(
+            ['Rscript', '--version'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return True, result.stderr  # R version info goes to stderr
+    except FileNotFoundError:
+        return False, "R not found"
+    except Exception as e:
+        return False, str(e)
+
+def check_r_packages():
+    """Check if required R packages are installed"""
+    required_packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
+    
+    check_script = """
+packages <- c('ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable')
+installed <- sapply(packages, function(pkg) {
+    suppressWarnings(require(pkg, character.only = TRUE, quietly = TRUE))
+})
+missing <- packages[!installed]
+if (length(missing) > 0) {
+    cat("MISSING:", paste(missing, collapse=","))
+} else {
+    cat("ALL_INSTALLED")
+}
+"""
+    
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.R', delete=False) as f:
+            f.write(check_script)
+            script_path = f.name
+        
+        result = subprocess.run(
+            ['Rscript', script_path],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        os.unlink(script_path)
+        
+        output = result.stdout.strip()
+        if "ALL_INSTALLED" in output:
+            return True, []
+        elif "MISSING:" in output:
+            missing = output.split("MISSING:")[1].strip().split(",")
+            return False, missing
+        else:
+            return False, required_packages
+    except Exception as e:
+        return False, required_packages
+
+def install_r_packages(packages):
+    """Attempt to install missing R packages"""
+    install_script = f"""
+packages <- c({','.join([f'"{pkg}"' for pkg in packages])})
+install.packages(packages, repos = "https://cloud.r-project.org/", quiet = TRUE)
+"""
+    
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.R', delete=False) as f:
+            f.write(install_script)
+            script_path = f.name
+        
+        result = subprocess.run(
+            ['Rscript', script_path],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes for installation
+        )
+        
+        os.unlink(script_path)
+        
+        return result.returncode == 0, result.stdout + result.stderr
+    except Exception as e:
+        return False, str(e)
+
 # Initialize OpenAI client
-client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+@st.cache_resource
+def get_openai_client():
+    try:
+        return openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    except Exception as e:
+        st.error("⚠️ OpenAI API key not found. Please add it to Streamlit secrets.")
+        st.info("Add `OPENAI_API_KEY` to your `.streamlit/secrets.toml` file")
+        st.stop()
+
+client = get_openai_client()
 
 # Helper function to fix common R path issues
 def fix_r_code(code, error_msg):
@@ -57,9 +173,7 @@ def fix_r_code(code, error_msg):
     
     # Fix Windows path issues (backslashes)
     if "\\U" in error_msg or "\\u" in error_msg or "used without hex digits" in error_msg:
-        # Replace single backslashes with forward slashes or double backslashes
         import re
-        # This shouldn't happen in our generated code, but just in case
         fixed_code = fixed_code.replace("\\", "/")
     
     return fixed_code
@@ -80,12 +194,14 @@ def run_r_code(code, df, output_dir):
 df <- read.csv("{csv_path_r}")
 
 # Load required libraries
-suppressPackageStartupMessages(library(ggplot2))
-suppressPackageStartupMessages(library(dplyr))
-suppressPackageStartupMessages(library(gtsummary))
-suppressPackageStartupMessages(library(survival))
-suppressPackageStartupMessages(library(survminer))
-suppressPackageStartupMessages(library(flextable))
+suppressPackageStartupMessages({{
+    library(ggplot2)
+    library(dplyr)
+    library(gtsummary)
+    library(survival)
+    library(survminer)
+    library(flextable)
+}})
 
 # User code
 {code}
@@ -151,16 +267,13 @@ def extract_html_from_output(output_dir):
                 html_content = f.read()
                 
                 # Extract style and table content from the full HTML
-                # gtsave creates a complete HTML document, we need just the table part
                 style_match = re.search(r'<style>(.*?)</style>', html_content, re.DOTALL)
                 table_match = re.search(r'<div id="[^"]*"[^>]*>.*?<table.*?</table>.*?</div>', html_content, re.DOTALL)
                 
                 if style_match and table_match:
-                    # Combine style and table
                     clean_html = f"<style>{style_match.group(1)}</style>\n{table_match.group(0)}"
                     html_files.append(clean_html)
                 else:
-                    # Fallback: use the full HTML content
                     html_files.append(html_content)
     
     return html_files
@@ -196,7 +309,7 @@ Requirements:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "You are an R debugging expert. Fix the code and return ONLY the corrected R code."},
                 {"role": "user", "content": fix_prompt}
@@ -351,7 +464,6 @@ def export_conversation():
         if msg["role"] == "user":
             html_content += f'<div class="question"><strong>❓ Question {idx//2 + 1}:</strong> {msg["content"]}</div>'
         else:
-            # Add auto-fix badge if applicable
             fix_badge = ""
             if "fixed" in msg and msg["fixed"]:
                 fix_badge = f'<span class="auto-fix-badge">✨ Auto-fixed after {msg["retries"]} attempt(s)</span>'
@@ -359,7 +471,6 @@ def export_conversation():
             content = msg["content"].replace("```r", "<pre><code class='language-r'>").replace("```", "</code></pre>")
             html_content += f'<div class="answer"><strong>💡 Analysis:</strong>{fix_badge}<br><br>{content}'
             
-            # Add text output if exists
             if "output" in msg and msg["output"]:
                 html_content += f'''
                 <div class="output-section">
@@ -368,10 +479,8 @@ def export_conversation():
                 </div>
                 '''
             
-            # Add executed R code if exists
             if "code" in msg:
                 code_label = "📝 Executed R Code" if "error" not in msg else "⚠️ Failed R Code"
-                code_class = "success" if "error" not in msg else "error"
                 html_content += f'''
                 <div class="output-section">
                     <div class="output-label">{code_label}:</div>
@@ -379,7 +488,6 @@ def export_conversation():
                 </div>
                 '''
                 
-                # Show error if exists
                 if "error" in msg:
                     html_content += f'''
                     <div class="output-section" style="background-color: #ffebee;">
@@ -388,7 +496,6 @@ def export_conversation():
                     </div>
                     '''
             
-            # Add HTML tables if exists
             if "html_tables" in msg and msg["html_tables"]:
                 html_content += '<div class="table-container">'
                 html_content += '<div class="output-label">📊 Table Results:</div>'
@@ -396,7 +503,6 @@ def export_conversation():
                     html_content += table_html
                 html_content += '</div>'
             
-            # Add plot images if exists (convert to base64)
             if "plot_images" in msg and msg["plot_images"]:
                 html_content += '<div class="output-label">📈 Visualizations:</div>'
                 for img_path in msg["plot_images"]:
@@ -425,208 +531,242 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "data_summary" not in st.session_state:
     st.session_state.data_summary = None
+if "r_checked" not in st.session_state:
+    st.session_state.r_checked = False
+if "r_status" not in st.session_state:
+    st.session_state.r_status = {"installed": False, "packages_ok": False}
+
+# Check R installation on first run
+if not st.session_state.r_checked:
+    with st.spinner("🔍 Checking R installation..."):
+        r_installed, r_version = check_r_installation()
+        
+        if r_installed:
+            packages_ok, missing_packages = check_r_packages()
+            st.session_state.r_status = {
+                "installed": True,
+                "packages_ok": packages_ok,
+                "missing_packages": missing_packages if not packages_ok else [],
+                "version": r_version
+            }
+        else:
+            st.session_state.r_status = {
+                "installed": False,
+                "packages_ok": False,
+                "missing_packages": [],
+                "error": r_version
+            }
+        
+        st.session_state.r_checked = True
+
+# Display R status in sidebar
+with st.sidebar:
+    st.header("⚙️ System Status")
+    
+    if st.session_state.r_status["installed"]:
+        st.success("✅ R is installed")
+        
+        if st.session_state.r_status["packages_ok"]:
+            st.success("✅ All R packages installed")
+        else:
+            st.warning(f"⚠️ Missing R packages: {', '.join(st.session_state.r_status['missing_packages'])}")
+            
+            if st.button("🔧 Try to install missing packages"):
+                with st.spinner("Installing R packages..."):
+                    success, output = install_r_packages(st.session_state.r_status['missing_packages'])
+                    if success:
+                        st.success("✅ Packages installed! Please refresh the page.")
+                        st.session_state.r_checked = False
+                    else:
+                        st.error("❌ Installation failed. Please install manually:")
+                        st.code(f"install.packages(c({', '.join([f'\\'{p}\\'' for p in st.session_state.r_status['missing_packages']])}))")
+                        with st.expander("Installation log"):
+                            st.text(output)
+    else:
+        st.error("❌ R is not installed")
+        st.info("Please install R from https://www.r-project.org/")
+        
+        with st.expander("📖 Installation Instructions"):
+            st.markdown("""
+            ### For Local Development:
+            1. Download R from https://www.r-project.org/
+            2. Install R on your system
+            3. Install required packages in R console:
+            ```r
+            install.packages(c("ggplot2", "dplyr", "gtsummary", 
+                               "survival", "survminer", "flextable"))
+            ```
+            
+            ### For Streamlit Cloud Deployment:
+            Create these files in your repository:
+            
+            **packages.txt:**
+            ```
+            r-base
+            r-base-dev
+            ```
+            
+            **install_r_packages.R:**
+            ```r
+            install.packages(c("ggplot2", "dplyr", "gtsummary", 
+                               "survival", "survminer", "flextable"),
+                           repos = "https://cloud.r-project.org/")
+            ```
+            
+            **.streamlit/config.toml:**
+            ```toml
+            [server]
+            enableXsrfProtection = false
+            ```
+            """)
+    
+    st.markdown("---")
 
 st.title("📊 Ask Your CSV (R Edition)")
 st.markdown("Upload your data and ask questions in plain English - powered by R!")
 
-# Sidebar for file upload
-with st.sidebar:
-    st.header("📁 Data Upload")
-    uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-    
-    if uploaded_file:
-        try:
-            df = pd.read_csv(uploaded_file)
-            st.session_state.df = df
-            
-            # Create data summary
-            st.session_state.data_summary = {
-                "shape": df.shape,
-                "columns": df.columns.tolist(),
-                "dtypes": df.dtypes.astype(str).to_dict(),
-                "sample": df.head(3).to_dict(),
-                "stats": df.describe().to_dict() if not df.empty else {}
-            }
-            
-            st.success(f"✅ Loaded {df.shape[0]} rows × {df.shape[1]} columns")
-            
-            # Data preview
-            with st.expander("Preview Data"):
-                st.dataframe(df.head())
+# Only show upload if R is properly configured
+if st.session_state.r_status["installed"] and st.session_state.r_status["packages_ok"]:
+    # Sidebar for file upload
+    with st.sidebar:
+        st.header("📁 Data Upload")
+        uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+        
+        if uploaded_file:
+            try:
+                df = pd.read_csv(uploaded_file)
+                st.session_state.df = df
                 
-            # Basic stats
-            with st.expander("Data Summary"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Total Rows", df.shape[0])
-                    st.metric("Total Columns", df.shape[1])
-                with col2:
-                    st.metric("Memory Usage", f"{df.memory_usage().sum() / 1024:.1f} KB")
-                    st.metric("Missing Values", df.isnull().sum().sum())
+                # Create data summary
+                st.session_state.data_summary = {
+                    "shape": df.shape,
+                    "columns": df.columns.tolist(),
+                    "dtypes": df.dtypes.astype(str).to_dict(),
+                    "sample": df.head(3).to_dict(),
+                    "stats": df.describe().to_dict() if not df.empty else {}
+                }
+                
+                st.success(f"✅ Loaded {df.shape[0]} rows × {df.shape[1]} columns")
+                
+                # Data preview
+                with st.expander("Preview Data"):
+                    st.dataframe(df.head())
                     
-        except Exception as e:
-            st.error(f"Error reading file: {str(e)}")
-            st.info("Please make sure your file is a valid CSV format.")
-    else:
-        st.info("👆 Upload a CSV file to start analyzing!")
-    
-    # Export options
-    if len(st.session_state.messages) >= 1:
-        st.sidebar.markdown("---")
-        st.sidebar.header("💾 Export Options")
-        if st.sidebar.button("Generate Report"):
-            export_html = export_conversation()
-            st.sidebar.download_button(
-                label="📥 Download Report (HTML)",
-                data=export_html,
-                file_name=f"data_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.html",
-                mime="text/html"
-            )
-
-# Main chat interface
-if st.session_state.df is not None:
-    # Display chat history
-    for msg in st.session_state.messages:
-        with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-            if "fixed" in msg and msg["fixed"]:
-                st.caption(f"✨ Auto-fixed after {msg['retries']} attempt(s)")
-            
-            # Show executed code for successful runs
-            if "code" in msg and "error" not in msg:
-                st.subheader("📝 Executed R Code", divider="green")
-                st.code(msg["code"], language="r")
-            
-            # Show failed code
-            if "code" in msg and "error" in msg:
-                st.subheader("⚠️ Failed R Code", divider="red")
-                st.code(msg["code"], language="r")
-                st.error("Error:")
-                st.code(msg["error"], language="text")
-            
-            if "output" in msg:
-                st.text(msg["output"])
-            if "html_tables" in msg:
-                for html_content in msg["html_tables"]:
-                    st.markdown(html_content, unsafe_allow_html=True)
-            if "plot_images" in msg:
-                for img_path in msg["plot_images"]:
-                    if os.path.exists(img_path):
-                        st.image(img_path)
-    
-    # Chat input
-    user_input = st.chat_input("Ask a question about your data")
-    
-    if user_input:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        
-        with st.chat_message("user"):
-            st.markdown(user_input)
-        
-        # Prepare data context
-        df = st.session_state.df
-        if len(df) > 100:
-            data_context = f"""
-            Dataset shape: {st.session_state.data_summary['shape']}
-            Columns: {', '.join(st.session_state.data_summary['columns'])}
-            Data types: {st.session_state.data_summary['dtypes']}
-            Sample rows: {st.session_state.data_summary['sample']}
-            Basic statistics: {st.session_state.data_summary['stats']}
-            """
+                # Basic stats
+                with st.expander("Data Summary"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Total Rows", df.shape[0])
+                        st.metric("Total Columns", df.shape[1])
+                    with col2:
+                        st.metric("Memory Usage", f"{df.memory_usage().sum() / 1024:.1f} KB")
+                        st.metric("Missing Values", df.isnull().sum().sum())
+                        
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
+                st.info("Please make sure your file is a valid CSV format.")
         else:
-            data_context = f"""
-            Full dataset preview:
-            {df.head(10).to_string()}
+            st.info("👆 Upload a CSV file to start analyzing!")
+        
+        # Export options
+        if len(st.session_state.messages) >= 1:
+            st.sidebar.markdown("---")
+            st.sidebar.header("💾 Export Options")
+            if st.sidebar.button("Generate Report"):
+                export_html = export_conversation()
+                st.sidebar.download_button(
+                    label="📥 Download Report (HTML)",
+                    data=export_html,
+                    file_name=f"data_analysis_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.html",
+                    mime="text/html"
+                )
+
+    # Main chat interface
+    if st.session_state.df is not None:
+        # Display chat history
+        for msg in st.session_state.messages:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+                if "fixed" in msg and msg["fixed"]:
+                    st.caption(f"✨ Auto-fixed after {msg['retries']} attempt(s)")
+                
+                if "code" in msg and "error" not in msg:
+                    st.subheader("📝 Executed R Code", divider="green")
+                    st.code(msg["code"], language="r")
+                
+                if "code" in msg and "error" in msg:
+                    st.subheader("⚠️ Failed R Code", divider="red")
+                    st.code(msg["code"], language="r")
+                    st.error("Error:")
+                    st.code(msg["error"], language="text")
+                
+                if "output" in msg:
+                    st.text(msg["output"])
+                if "html_tables" in msg:
+                    for html_content in msg["html_tables"]:
+                        st.markdown(html_content, unsafe_allow_html=True)
+                if "plot_images" in msg:
+                    for img_path in msg["plot_images"]:
+                        if os.path.exists(img_path):
+                            st.image(img_path)
+        
+        # Chat input
+        user_input = st.chat_input("Ask a question about your data")
+        
+        if user_input:
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": user_input})
+            
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            # Prepare data context
+            df = st.session_state.df
+            if len(df) > 100:
+                data_context = f"""
+                Dataset shape: {st.session_state.data_summary['shape']}
+                Columns: {', '.join(st.session_state.data_summary['columns'])}
+                Data types: {st.session_state.data_summary['dtypes']}
+                Sample rows: {st.session_state.data_summary['sample']}
+                Basic statistics: {st.session_state.data_summary['stats']}
+                """
+            else:
+                data_context = f"""
+                Full dataset preview:
+                {df.head(10).to_string()}
+                """
+            
+            # Enhanced system prompt for R
+            system_prompt = f"""You are a helpful data analyst assistant using R.
+            
+            The user has uploaded a CSV file with the following information:
+            {data_context}
+            
+            The data is loaded in an R dataframe called `df`.
+            
+            Guidelines:
+            - Answer the user's question clearly and concisely
+            - Write R code using base R, dplyr, ggplot2, gtsummary, and survival
+            - For regression tables, use gtsummary's tbl_regression or tbl_summary
+            - For visualizations, use ggplot2 and save plots using ggsave()
+            - Always validate data before operations
+            - Keep responses focused on the data and question
+            - Summarize findings and insights
+            
+            When writing code:
+            - The dataframe is available as 'df'
+            - Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
+            - For survival plots, MUST load survminer: library(survminer) before using ggsurvplot()
+            - For plots, save them using: ggsave("plot.png", width=10, height=6)
+            - For ggsurvplot, save using: ggsave("plot.png", p$plot, width=10, height=6)
+            - You can create multiple plots: plot1.png, plot2.png, etc.
+            - For gtsummary tables, MUST save as HTML using flextable with pipe operator:
+              table <- tbl_regression(model, exponentiate = TRUE)
+              as_flex_table(table) %>% save_as_html(path = "table.html")
+            - IMPORTANT: Use pipe operator (%>%) and path parameter in save_as_html()
+            - Always add titles and labels to plots
+            - Print results using print() or cat()
             """
-        
-        # Enhanced system prompt for R
-        system_prompt = f"""You are a helpful data analyst assistant using R.
-        
-        The user has uploaded a CSV file with the following information:
-        {data_context}
-        
-        The data is loaded in an R dataframe called `df`.
-        
-        Guidelines:
-        - Answer the user's question clearly and concisely
-        - Write R code using base R, dplyr, ggplot2, gtsummary, and survival
-        - For regression tables, use gtsummary's tbl_regression or tbl_summary
-        - For visualizations, use ggplot2 and save plots using ggsave()
-        - Always validate data before operations
-        - Keep responses focused on the data and question
-        - Summarize findings and insights
-        
-        When writing code:
-        - The dataframe is available as 'df'
-        - Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
-        - For survival plots, MUST load survminer: library(survminer) before using ggsurvplot()
-        - For plots, save them using: ggsave("plot.png", width=10, height=6)
-        - For ggsurvplot, save using: ggsave("plot.png", p$plot, width=10, height=6)
-        - You can create multiple plots: plot1.png, plot2.png, etc.
-        - For gtsummary tables, MUST save as HTML using flextable with pipe operator:
-          table <- tbl_regression(model, exponentiate = TRUE)
-          as_flex_table(table) %>% save_as_html(path = "table.html")
-        - IMPORTANT: Use pipe operator (%>%) and path parameter in save_as_html()
-        - Always add titles and labels to plots
-        - Print results using print() or cat()
-        
-        Example code structure for tables:
-        ```r
-        # Cox regression model
-        library(survival)
-        library(gtsummary)
-        library(flextable)
-        
-        model <- coxph(Surv(time, status) ~ age + sex, data = df)
-        
-        # Create and save table as HTML (CORRECT SYNTAX)
-        table <- tbl_regression(model, exponentiate = TRUE)
-        as_flex_table(table) %>% save_as_html(path = "table.html")
-        
-        # For summary tables
-        summary_table <- tbl_summary(df, by = group_var)
-        as_flex_table(summary_table) %>% save_as_html(path = "summary.html")
-        
-        # Alternative syntax also works:
-        # save_as_html(as_flex_table(table), path = "table.html")
-        ```
-        
-        Example for Kaplan-Meier plots:
-        ```r
-        # Kaplan-Meier survival analysis
-        library(survival)
-        library(survminer)
-        
-        # Fit survival model
-        km_fit <- survfit(Surv(time, status) ~ treatment, data = df)
-        
-        # Create plot with ggsurvplot
-        p <- ggsurvplot(
-          km_fit,
-          data = df,
-          risk.table = TRUE,
-          pval = TRUE,
-          conf.int = TRUE,
-          xlab = "Time",
-          ylab = "Survival Probability",
-          title = "Kaplan-Meier Curves"
-        )
-        
-        # Save plot (note: use p$plot for ggsurvplot objects)
-        ggsave("km_plot.png", p$plot, width = 10, height = 6)
-        ```
-        
-        Example for plots:
-        ```r
-        # Visualization
-        p <- ggplot(df, aes(x=x, y=y)) + 
-          geom_point() +
-          labs(title="My Plot", x="X axis", y="Y axis")
-        
-        ggsave("plot.png", p, width=10, height=6)
-        ```
-        """
         
         # Generate response
         with st.chat_message("assistant"):
@@ -644,7 +784,7 @@ if st.session_state.df is not None:
                     messages.append({"role": "user", "content": user_input})
                     
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model="gpt-4.1",
                         messages=messages,
                         temperature=0.1,
                         max_tokens=1500
