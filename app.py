@@ -12,6 +12,15 @@ import json
 import re
 import sys
 
+# Auto-install R packages on first run (for Streamlit Cloud)
+if os.path.exists("install_r_packages.R") and not os.path.exists(".r_packages_installed"):
+    try:
+        subprocess.run(["Rscript", "install_r_packages.R"], check=True, timeout=600)
+        # Create marker file
+        with open(".r_packages_installed", "w") as f:
+            f.write("installed")
+    except Exception as e:
+        st.warning(f"Could not auto-install R packages: {e}")
 
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
