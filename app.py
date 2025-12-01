@@ -1,152 +1,50 @@
 import streamlit as st
-import os
+import pandas as pd
+import openai
 import subprocess
-import sys
+import os
+import tempfile
+import re
 
-# 1. CẤU HÌNH TRƯỚC (Để Streamlit không bị timeout)
+# --- CẤU HÌNH TRANG ---
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
     page_icon="📊",
     layout="wide"
 )
 
-# 2. THIẾT LẬP MÔI TRƯỜNG R (Khắc phục lỗi Permission & Missing Package)
-# Tạo đường dẫn thư viện cục bộ
-r_lib_path = os.path.join(os.getcwd(), "r_libs")
-if not os.path.exists(r_lib_path):
-    os.makedirs(r_lib_path)
+# --- KHÔNG CẦN HÀM INSTALL R NỮA ---
+# Conda đã cài sẵn mọi thứ rồi!
 
-# Ép biến môi trường để cả Python và R đều nhìn thấy thư mục này
-os.environ["R_LIBS_USER"] = r_lib_path
-
-# 3. HÀM CÀI ĐẶT R (Chạy sau khi giao diện đã load)
-def install_r_dependencies():
-    """Cài đặt R packages nếu chưa có"""
-    # File đánh dấu đã cài đặt để không chạy lại mỗi lần reload
-    if os.path.exists(".r_packages_installed"):
-        return
-
-    placeholder = st.empty()
-    placeholder.info("⚙️ Đang thiết lập môi trường R (Lần đầu chạy sẽ mất khoảng 1-2 phút)...")
-    
-    # Đảm bảo file install_r_packages.R tồn tại
-    if os.path.exists("install_r_packages.R"):
-        try:
-            # Truyền biến môi trường vào subprocess
-            env = os.environ.copy()
-            subprocess.run(
-                ["Rscript", "install_r_packages.R"], 
-                check=True, 
-                timeout=1800,
-                env=env # <--- QUAN TRỌNG: Để R biết cài vào r_libs
-            )
-            # Tạo file đánh dấu
-            with open(".r_packages_installed", "w") as f:
-                f.write("installed")
-            placeholder.success("✅ Đã cài đặt xong R Packages!")
-            placeholder.empty()
-        except subprocess.CalledProcessError as e:
-            placeholder.error(f"❌ Lỗi cài đặt R: {e}")
-        except subprocess.TimeoutExpired:
-            placeholder.error("❌ Quá thời gian cài đặt.")
-    else:
-        placeholder.warning("⚠️ Không tìm thấy file install_r_packages.R")
-
-# 4. CHẠY CÀI ĐẶT
-install_r_dependencies()
-
-import streamlit as st
-import pandas as pd
-import openai
-import subprocess
-import tempfile
-import os
-import warnings
-import datetime
-import base64
-from io import BytesIO
-import json
-import re
-import sys
-
-
-
-# Check R installation and packages
+# --- CÁC HÀM XỬ LÝ (GIỮ NGUYÊN) ---
 def check_r_installation():
-    """Check if R is installed and return version info"""
+    """Chỉ cần kiểm tra version thôi"""
     try:
+        # Kiểm tra xem Rscript có chạy được không
         result = subprocess.run(
             ['Rscript', '--version'],
             capture_output=True,
             text=True,
             timeout=5
         )
-        return True, result.stderr  # R version info goes to stderr
-    except FileNotFoundError:
-        return False, "R not found"
+        return True, result.stderr
     except Exception as e:
         return False, str(e)
 
-def check_r_packages():
-    """Check if required R packages are installed"""
-    required_packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
-    
-    check_script = """
-packages <- c('ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable')
-installed <- sapply(packages, function(pkg) {
-    suppressWarnings(require(pkg, character.only = TRUE, quietly = TRUE))
-})
-missing <- packages[!installed]
-if (length(missing) > 0) {
-    cat("MISSING:", paste(missing, collapse=","))
-} else {
-    cat("ALL_INSTALLED")
-}
-"""
-    
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.R', delete=False) as f:
-            f.write(check_script)
-            script_path = f.name
-        
-        result = subprocess.run(
-            ['Rscript', script_path],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
-        
-        os.unlink(script_path)
-        
-        output = result.stdout.strip()
-        if "ALL_INSTALLED" in output:
-            return True, []
-        elif "MISSING:" in output:
-            missing = output.split("MISSING:")[1].strip().split(",")
-            return False, missing
-        else:
-            return False, required_packages
-    except Exception as e:
-        return False, required_packages
+# ... (Giữ nguyên các hàm run_r_code, get_openai_client, fix_r_code...) ...
+# ... (Giữ nguyên phần giao diện người dùng) ...
 
-def install_r_packages(packages):
-    # ... (code tạo file script R giữ nguyên) ...
-    
-    # Cập nhật môi trường cho subprocess
-    env = os.environ.copy()
-    env["R_LIBS_USER"] = os.path.join(os.getcwd(), "r_libs")
-    
-    try:
-        result = subprocess.run(
-            ['Rscript', script_path],
-            capture_output=True,
-            text=True,
-            timeout=1800,
-            env=env 
-        )
-        return result.returncode == 0, result.stdout + result.stderr
-    except Exception as e:
-        return False, str(e)
+# --- PHẦN MAIN ---
+# Bỏ qua bước kiểm tra cài đặt packages phức tạp
+r_installed, r_info = check_r_installation()
+
+if r_installed:
+    with st.sidebar:
+        st.success(f"✅ R System Ready\n{r_info.splitlines()[0] if r_info else ''}")
+else:
+    st.error("❌ R không tìm thấy. Vui lòng kiểm tra environment.yml")
+
+# ... (Phần code xử lý chat và upload file giữ nguyên) ...
 
 # Initialize OpenAI client
 @st.cache_resource
