@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # --- PHẦN 1: HỆ THỐNG & R (Cài bằng Conda) ---
-  - python=3.9
+  - python=3.10
   - pip  # Bắt buộc phải cài pip để chạy phần dưới
   
   # R Core
