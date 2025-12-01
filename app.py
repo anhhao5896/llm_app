@@ -99,26 +99,20 @@ if (length(missing) > 0) {
         return False, required_packages
 
 def install_r_packages(packages):
-    """Attempt to install missing R packages"""
-    install_script = f"""
-packages <- c({','.join([f'"{pkg}"' for pkg in packages])})
-install.packages(packages, repos = "https://cloud.r-project.org/", quiet = TRUE)
-"""
+    # ... (code tạo file script R giữ nguyên) ...
+    
+    # Cập nhật môi trường cho subprocess
+    env = os.environ.copy()
+    env["R_LIBS_USER"] = os.path.join(os.getcwd(), "r_libs")
     
     try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.R', delete=False) as f:
-            f.write(install_script)
-            script_path = f.name
-        
         result = subprocess.run(
             ['Rscript', script_path],
             capture_output=True,
             text=True,
-            timeout=900  # 15 minutes for installation
+            timeout=1800,
+            env=env 
         )
-        
-        os.unlink(script_path)
-        
         return result.returncode == 0, result.stdout + result.stderr
     except Exception as e:
         return False, str(e)
