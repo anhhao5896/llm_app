@@ -1,12 +1,10 @@
-unixodbc
-unixodbc-dev
-odbcinst
-libgdal-dev
-libproj-dev
-libgeos-dev
-libudunits2-dev
 r-base
 r-base-dev
 libssl-dev
 libcurl4-openssl-dev
 libxml2-dev
+unixodbc-dev
+libgdal-dev
+libgeos-dev
+libproj-dev
+libudunits2-dev
