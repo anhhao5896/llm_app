@@ -1,6 +1,2 @@
-r-ggplot2
-r-dplyr
-r-gtsummary
-r-survival
-r-survminer
-r-flextable
+r-base
+r-base-dev
