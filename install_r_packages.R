@@ -11,7 +11,6 @@ user_lib <- Sys.getenv("R_LIBS_USER")
 if (user_lib == "") {
   user_lib <- file.path(Sys.getenv("HOME"), "R", "library")
 }
-
 if (!dir.exists(user_lib)) {
   dir.create(user_lib, recursive = TRUE)
   cat("Created user library directory:", user_lib, "\n")
@@ -24,7 +23,6 @@ cat("Library paths:", .libPaths(), "\n\n")
 # List of required packages
 # Note: ggplot2, dplyr, survival should be pre-installed via packages.txt
 packages <- c("ggplot2", "dplyr", "gtsummary", "survival", "survminer", "flextable")
-
 cat("Required packages:", paste(packages, collapse = ", "), "\n\n")
 
 # Check which packages are missing
@@ -79,7 +77,6 @@ results <- sapply(missing_packages, install_package)
 cat("\n==========================================\n")
 cat("Installation Summary\n")
 cat("==========================================\n")
-
 if (all(results)) {
   cat("✓ All packages installed successfully!\n")
   quit(status = 0)
