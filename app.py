@@ -536,7 +536,9 @@ with st.sidebar:
                         st.session_state.r_checked = False
                     else:
                         st.error("❌ Installation failed. Please install manually:")
-                        st.code(f"install.packages(c({', '.join([f'\\'{p}\\'' for p in st.session_state.r_status['missing_packages']])}))")
+                        # Fix: Cannot use backslash in f-string expression
+                        pkg_list = ', '.join([f"'{p}'" for p in st.session_state.r_status['missing_packages']])
+                        st.code(f"install.packages(c({pkg_list}))")
                         with st.expander("Installation log"):
                             st.text(output)
     else:
