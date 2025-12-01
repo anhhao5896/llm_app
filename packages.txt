@@ -1,5 +1,7 @@
 r-base
 r-base-dev
+r-cran-matrix
+r-cran-survival
 libcurl4-openssl-dev
 libssl-dev
 libxml2-dev
@@ -10,3 +12,6 @@ libfreetype6-dev
 libpng-dev
 libtiff5-dev
 libjpeg-dev
+libgeos-dev
+libproj-dev
+libudunits2-dev
