@@ -7,7 +7,7 @@ dependencies:
   - pip  # Bắt buộc phải cài pip để chạy phần dưới
   
   # R Core
-  - r-base=4.3.1
+  - r-base=4.3.3
   
   # R Packages (Binary siêu tốc)
   - r-ggplot2
@@ -19,6 +19,9 @@ dependencies:
   - r-remotes
   - r-systemfonts
   - r-textshaping
+  - r-broom
+  - r-broom.helpers
+  - r-gt  
   
   # --- PHẦN 2: THƯ VIỆN PYTHON (Cài bằng PIP) ---
   # Cài bằng pip sẽ đảm bảo không bao giờ bị lỗi ModuleNotfound
