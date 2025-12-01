@@ -46,11 +46,10 @@ def check_r_installation():
 
 def check_r_packages():
     """Check if required R packages are installed"""
-    # Updated to minimal package list
-    required_packages = ['ggplot2', 'dplyr', 'survival']
+    required_packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
     
     check_script = """
-packages <- c('ggplot2', 'dplyr', 'survival')
+packages <- c('ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable')
 installed <- sapply(packages, function(pkg) {
     suppressWarnings(require(pkg, character.only = TRUE, quietly = TRUE))
 })
@@ -86,7 +85,7 @@ if (length(missing) > 0) {
             return False, required_packages
     except Exception as e:
         return False, required_packages
-        
+
 def install_r_packages(packages):
     """Attempt to install missing R packages"""
     install_script = f"""
@@ -137,7 +136,6 @@ def fix_r_code(code, error_msg):
     return fixed_code
 
 # Helper function to run R code
-# Helper function to run R code
 def run_r_code(code, df, output_dir):
     """Execute R code and return results"""
     # Save dataframe to temp CSV for R to read
@@ -147,16 +145,19 @@ def run_r_code(code, df, output_dir):
     # Normalize path for R (use forward slashes)
     csv_path_r = csv_path.replace("\\", "/")
     
-    # Create R script with data loading - MINIMAL PACKAGES ONLY
+    # Create R script with data loading
     r_script = f"""
 # Load data
 df <- read.csv("{csv_path_r}")
 
-# Load required libraries (minimal set)
+# Load required libraries
 suppressPackageStartupMessages({{
     library(ggplot2)
     library(dplyr)
+    library(gtsummary)
     library(survival)
+    library(survminer)
+    library(flextable)
 }})
 
 # User code
@@ -256,18 +257,11 @@ Requirements:
 - Use forward slashes (/) for any file paths
 - Ensure all column names are correctly referenced
 - The dataframe is called 'df'
-- Libraries available: ggplot2, dplyr, survival (base R packages only)
-- For Kaplan-Meier plots, use base survival package:
-  * fit <- survfit(Surv(time, status) ~ group, data = df)
-  * plot(fit, col=1:length(unique(df$group)), main="Kaplan-Meier")
-  * legend("topright", legend=levels(factor(df$group)), col=1:length(unique(df$group)), lty=1)
-- For plots, save using: ggsave("plot.png", width=10, height=6)
-- For tables, use base R functions:
-  * summary() for model summaries
-  * table() for contingency tables
-  * print() or write.csv() to save results
-- Always add titles and labels to plots
-- Print results using print() or cat()
+- Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
+- For Kaplan-Meier plots, MUST load library(survminer) before using ggsurvplot()
+- For ggsurvplot objects, save using: ggsave("plot.png", p$plot, width=10, height=6)
+- For gtsummary tables, use correct syntax: as_flex_table(table) %>% save_as_html(path = "table.html")
+- IMPORTANT: Always use pipe operator (%>%) and path parameter in save_as_html()
 """
     
     try:
@@ -702,67 +696,36 @@ if st.session_state.r_status["installed"] and st.session_state.r_status["package
                 """
             
             # Enhanced system prompt for R
-            system_prompt = f"""You are a helpful data analyst assistant using R with minimal packages.
-
-        The user has uploaded a CSV file with the following information:
-        {data_context}
-        
-        The data is loaded in an R dataframe called `df`.
-        
-        Guidelines:
-        - Answer the user's question clearly and concisely
-        - Write R code using base R, dplyr, ggplot2, and survival packages ONLY
-        - For regression tables, use base R summary() function
-        - For visualizations, use ggplot2 and save plots using ggsave()
-        - Always validate data before operations
-        - Keep responses focused on the data and question
-        - Summarize findings and insights
-        
-        When writing code:
-        - The dataframe is available as 'df'
-        - Libraries available: ggplot2, dplyr, survival (NO gtsummary, survminer, or flextable)
-        - For plots, save using: ggsave("plot.png", width=10, height=6)
-        - You can create multiple plots: plot1.png, plot2.png, etc.
-        
-        For common tasks:
-        1. Summary statistics:
-           summary(df)
-           df %>% group_by(category) %>% summarise(mean = mean(value), sd = sd(value))
-        
-        2. Regression tables:
-           model <- lm(y ~ x1 + x2, data = df)
-           print(summary(model))
-           # Or save coefficients
-           coef_table <- summary(model)$coefficients
-           write.csv(coef_table, "coefficients.csv")
-        
-        3. Cox regression:
-           library(survival)
-           cox_model <- coxph(Surv(time, status) ~ age + sex, data = df)
-           print(summary(cox_model))
-        
-        4. Kaplan-Meier survival curves:
-           library(survival)
-           fit <- survfit(Surv(time, status) ~ group, data = df)
-           
-           # Base R plotting
-           png("survival_plot.png", width=800, height=600)
-           plot(fit, col=1:length(unique(df$group)), 
-                xlab="Time", ylab="Survival Probability",
-                main="Kaplan-Meier Survival Curves")
-           legend("topright", legend=levels(factor(df$group)), 
-                  col=1:length(unique(df$group)), lty=1)
-           dev.off()
-        
-        5. Contingency tables:
-           table_result <- table(df$var1, df$var2)
-           print(table_result)
-           print(prop.table(table_result))
-        
-        - Always add titles and labels to plots
-        - Print results using print() or cat()
-        - For formatted output, use cat() with newlines and formatting
-        """
+            system_prompt = f"""You are a helpful data analyst assistant using R.
+            
+            The user has uploaded a CSV file with the following information:
+            {data_context}
+            
+            The data is loaded in an R dataframe called `df`.
+            
+            Guidelines:
+            - Answer the user's question clearly and concisely
+            - Write R code using base R, dplyr, ggplot2, gtsummary, and survival
+            - For regression tables, use gtsummary's tbl_regression or tbl_summary
+            - For visualizations, use ggplot2 and save plots using ggsave()
+            - Always validate data before operations
+            - Keep responses focused on the data and question
+            - Summarize findings and insights
+            
+            When writing code:
+            - The dataframe is available as 'df'
+            - Libraries available: ggplot2, dplyr, gtsummary, survival, survminer, flextable
+            - For survival plots, MUST load survminer: library(survminer) before using ggsurvplot()
+            - For plots, save them using: ggsave("plot.png", width=10, height=6)
+            - For ggsurvplot, save using: ggsave("plot.png", p$plot, width=10, height=6)
+            - You can create multiple plots: plot1.png, plot2.png, etc.
+            - For gtsummary tables, MUST save as HTML using flextable with pipe operator:
+              table <- tbl_regression(model, exponentiate = TRUE)
+              as_flex_table(table) %>% save_as_html(path = "table.html")
+            - IMPORTANT: Use pipe operator (%>%) and path parameter in save_as_html()
+            - Always add titles and labels to plots
+            - Print results using print() or cat()
+            """
         
         # Generate response
         with st.chat_message("assistant"):
@@ -919,9 +882,8 @@ else:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: gray; font-size: 12px;'>
-💡 Powered by R, ggplot2, dplyr, and survival | 
+💡 Powered by R, ggplot2, gtsummary, survminer, and flextable | 
 🔒 Your data stays private and is not stored |
-⚙️ Requires R and base packages (ggplot2, dplyr, survival) installed |
-🚀 Optimized for fast deployment
+⚙️ Requires R and packages (ggplot2, dplyr, gtsummary, survival, survminer, flextable) installed
 </div>
 """, unsafe_allow_html=True)
