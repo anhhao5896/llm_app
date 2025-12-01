@@ -1,3 +1,15 @@
+import os
+
+
+r_lib_path = os.path.join(os.getcwd(), "r_libs")
+if not os.path.exists(r_lib_path):
+    os.makedirs(r_lib_path)
+
+# Ép R tìm thư viện trong thư mục này
+os.environ["R_LIBS_USER"] = r_lib_path
+
+
+
 import streamlit as st
 import pandas as pd
 import openai
