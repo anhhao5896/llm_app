@@ -38,65 +38,62 @@ def fix_r_code(code, error_msg):
 # Helper function to run R code
 # --- CẬP NHẬT ĐOẠN NÀY TRONG APP.PY ---
 
-def find_r_executable():
+# --- Thay thế đoạn code tương ứng trong app.py của bạn ---
+
+def get_r_path():
     """
-    Tìm đường dẫn Rscript dựa trên vị trí của Python hiện tại.
-    Nguyên lý: Trong Conda, Python và R nằm cùng thư mục 'bin'.
+    Tìm đường dẫn tuyệt đối của Rscript dựa trên vị trí Python.
+    Đây là cách duy nhất hoạt động ổn định trên Streamlit Cloud Conda.
     """
-    # 1. Lấy đường dẫn thư mục 'bin' của Python hiện tại
-    # Ví dụ: /home/adminuser/.conda/envs/app/bin
+    # 1. Lấy thư mục chứa file python hiện tại (VD: /home/user/.conda/envs/env/bin)
     python_dir = os.path.dirname(sys.executable)
     
-    # 2. Suy luận đường dẫn Rscript
-    r_path_candidate = os.path.join(python_dir, "Rscript")
+    # 2. Tạo đường dẫn tuyệt đối tới Rscript
+    r_path = os.path.join(python_dir, "Rscript")
     
-    # 3. Kiểm tra xem file có tồn tại và chạy được không
-    if os.path.exists(r_path_candidate):
-        return r_path_candidate
+    # 3. Kiểm tra tồn tại
+    if os.path.exists(r_path):
+        return r_path
+    
+    # Fallback: Nếu chạy local trên Windows thì có thể là Rscript.exe
+    if os.path.exists(r_path + ".exe"):
+        return r_path + ".exe"
         
-    # 4. Fallback: Nếu không thấy, thử các đường dẫn cứng (dự phòng)
-    fallback_paths = [
-        "/usr/local/bin/Rscript",
-        "/usr/bin/Rscript"
-    ]
-    for path in fallback_paths:
-        if os.path.exists(path):
-            return path
-            
+    # Fallback cuối cùng: Thử các đường dẫn Linux tiêu chuẩn
+    if os.path.exists("/usr/bin/Rscript"): return "/usr/bin/Rscript"
+    if os.path.exists("/usr/local/bin/Rscript"): return "/usr/local/bin/Rscript"
+    
     return None
 
 def check_r_environment():
-    """Kiểm tra và cấu hình đường dẫn R"""
-    # Tìm đường dẫn tuyệt đối
-    r_path = find_r_executable()
+    """Kiểm tra R có chạy được không bằng đường dẫn tuyệt đối"""
+    r_path = get_r_path()
     
-    if r_path:
-        # Lưu vào session để dùng lại
+    if not r_path:
+        return False, f"❌ Cannot find Rscript. Python is at: {sys.executable}"
+        
+    try:
+        # Lưu đường dẫn tìm được vào session state để dùng cho các hàm khác
         st.session_state['r_path'] = r_path
         
-        try:
-            # Thử chạy lệnh version
-            result = subprocess.run(
-                [r_path, '--version'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            return True, result.stderr
-        except Exception as e:
-            return False, f"Found at {r_path} but failed to run: {str(e)}"
-    else:
-        # Debug: In ra nơi Python đang chạy để biết đường mà sửa
-        return False, f"Could not find Rscript. Python is running at: {sys.executable}"
+        result = subprocess.run(
+            [r_path, '--version'], # <--- Dùng đường dẫn tuyệt đối
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        return True, result.stderr
+    except Exception as e:
+        return False, str(e)
 
 def run_r_code(code, df, output_dir):
-    # ... (Phần lưu file CSV giữ nguyên) ...
+    # ... (Giữ nguyên phần lưu CSV và tạo script.R) ...
+    # Copy lại đoạn đầu hàm cũ của bạn:
     csv_path = os.path.join(output_dir, "temp_data.csv")
     df.to_csv(csv_path, index=False)
     csv_path_r = csv_path.replace("\\", "/")
     output_dir_r = output_dir.replace("\\", "/")
     
-    # ... (Phần tạo script R giữ nguyên) ...
     r_script = f"""
     setwd("{output_dir_r}")
     df <- read.csv("{csv_path_r}")
@@ -114,22 +111,30 @@ def run_r_code(code, df, output_dir):
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write(r_script)
     
-    # --- QUAN TRỌNG: DÙNG ĐƯỜNG DẪN TUYỆT ĐỐI ---
+    # --- PHẦN QUAN TRỌNG NHẤT: GỌI SUBPROCESS ---
+    
+    # Lấy đường dẫn tuyệt đối đã tìm được
     r_exec = st.session_state.get('r_path')
+    if not r_exec: r_exec = get_r_path() # Tìm lại nếu chưa có
     
-    # Nếu chưa tìm thấy R (lỗi logic), thử fallback về 'Rscript' thường
-    if not r_exec: 
-        r_exec = 'Rscript'
-    
+    if not r_exec:
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': 'CRITICAL: Rscript not found. Check environment.yml',
+            'output_dir': output_dir,
+            'code': code
+        }
+
     try:
         result = subprocess.run(
-            [r_exec, script_path], # <--- Gọi bằng đường dẫn đầy đủ
+            [r_exec, script_path], # <--- KHÔNG DÙNG 'Rscript', DÙNG r_exec
             capture_output=True,
             text=True,
             timeout=60,
             cwd=output_dir
         )
-        # ... (Phần return giữ nguyên) ...
+        
         return {
             'success': result.returncode == 0,
             'stdout': result.stdout,
@@ -141,7 +146,7 @@ def run_r_code(code, df, output_dir):
         return {
             'success': False,
             'stdout': '',
-            'stderr': str(e),
+            'stderr': f"Subprocess Error: {str(e)}",
             'output_dir': output_dir,
             'code': code
         }
