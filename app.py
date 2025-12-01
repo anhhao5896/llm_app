@@ -2,25 +2,24 @@ import streamlit as st
 import pandas as pd
 import openai
 import subprocess
-import os
 import tempfile
+import os
+import datetime
+import base64
 import re
+import sys
 
-# --- CẤU HÌNH TRANG ---
+# 1. Cấu hình trang (Phải nằm đầu tiên)
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
     page_icon="📊",
     layout="wide"
 )
 
-# --- KHÔNG CẦN HÀM INSTALL R NỮA ---
-# Conda đã cài sẵn mọi thứ rồi!
-
-# --- CÁC HÀM XỬ LÝ (GIỮ NGUYÊN) ---
-def check_r_installation():
-    """Chỉ cần kiểm tra version thôi"""
+# 2. Kiểm tra môi trường R (Chỉ check version để đảm bảo Conda đã load)
+def check_r_environment():
+    """Kiểm tra xem R có hoạt động không"""
     try:
-        # Kiểm tra xem Rscript có chạy được không
         result = subprocess.run(
             ['Rscript', '--version'],
             capture_output=True,
@@ -28,23 +27,10 @@ def check_r_installation():
             timeout=5
         )
         return True, result.stderr
+    except FileNotFoundError:
+        return False, "R executable not found."
     except Exception as e:
         return False, str(e)
-
-# ... (Giữ nguyên các hàm run_r_code, get_openai_client, fix_r_code...) ...
-# ... (Giữ nguyên phần giao diện người dùng) ...
-
-# --- PHẦN MAIN ---
-# Bỏ qua bước kiểm tra cài đặt packages phức tạp
-r_installed, r_info = check_r_installation()
-
-if r_installed:
-    with st.sidebar:
-        st.success(f"✅ R System Ready\n{r_info.splitlines()[0] if r_info else ''}")
-else:
-    st.error("❌ R không tìm thấy. Vui lòng kiểm tra environment.yml")
-
-# ... (Phần code xử lý chat và upload file giữ nguyên) ...
 
 # Initialize OpenAI client
 @st.cache_resource
