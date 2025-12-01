@@ -1,8 +1,8 @@
 r-base
 r-base-dev
-libssl-dev
 libcurl4-openssl-dev
 libxml2-dev
+libssl-dev
 libfontconfig1-dev
 libharfbuzz-dev
 libfribidi-dev
