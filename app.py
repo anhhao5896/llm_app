@@ -1,14 +1,59 @@
+import streamlit as st
 import os
+import subprocess
+import sys
 
+# 1. CẤU HÌNH TRƯỚC (Để Streamlit không bị timeout)
+st.set_page_config(
+    page_title="Ask Your CSV (R Edition)",
+    page_icon="📊",
+    layout="wide"
+)
 
+# 2. THIẾT LẬP MÔI TRƯỜNG R (Khắc phục lỗi Permission & Missing Package)
+# Tạo đường dẫn thư viện cục bộ
 r_lib_path = os.path.join(os.getcwd(), "r_libs")
 if not os.path.exists(r_lib_path):
     os.makedirs(r_lib_path)
 
-# Ép R tìm thư viện trong thư mục này
+# Ép biến môi trường để cả Python và R đều nhìn thấy thư mục này
 os.environ["R_LIBS_USER"] = r_lib_path
 
+# 3. HÀM CÀI ĐẶT R (Chạy sau khi giao diện đã load)
+def install_r_dependencies():
+    """Cài đặt R packages nếu chưa có"""
+    # File đánh dấu đã cài đặt để không chạy lại mỗi lần reload
+    if os.path.exists(".r_packages_installed"):
+        return
 
+    placeholder = st.empty()
+    placeholder.info("⚙️ Đang thiết lập môi trường R (Lần đầu chạy sẽ mất khoảng 1-2 phút)...")
+    
+    # Đảm bảo file install_r_packages.R tồn tại
+    if os.path.exists("install_r_packages.R"):
+        try:
+            # Truyền biến môi trường vào subprocess
+            env = os.environ.copy()
+            subprocess.run(
+                ["Rscript", "install_r_packages.R"], 
+                check=True, 
+                timeout=1800,
+                env=env # <--- QUAN TRỌNG: Để R biết cài vào r_libs
+            )
+            # Tạo file đánh dấu
+            with open(".r_packages_installed", "w") as f:
+                f.write("installed")
+            placeholder.success("✅ Đã cài đặt xong R Packages!")
+            placeholder.empty()
+        except subprocess.CalledProcessError as e:
+            placeholder.error(f"❌ Lỗi cài đặt R: {e}")
+        except subprocess.TimeoutExpired:
+            placeholder.error("❌ Quá thời gian cài đặt.")
+    else:
+        placeholder.warning("⚠️ Không tìm thấy file install_r_packages.R")
+
+# 4. CHẠY CÀI ĐẶT
+install_r_dependencies()
 
 import streamlit as st
 import pandas as pd
@@ -24,21 +69,7 @@ import json
 import re
 import sys
 
-# Auto-install R packages on first run (for Streamlit Cloud)
-if os.path.exists("install_r_packages.R") and not os.path.exists(".r_packages_installed"):
-    try:
-        subprocess.run(["Rscript", "install_r_packages.R"], check=True, timeout=600)
-        # Create marker file
-        with open(".r_packages_installed", "w") as f:
-            f.write("installed")
-    except Exception as e:
-        st.warning(f"Could not auto-install R packages: {e}")
 
-st.set_page_config(
-    page_title="Ask Your CSV (R Edition)",
-    page_icon="📊",
-    layout="wide"
-)
 
 # Check R installation and packages
 def check_r_installation():
