@@ -1,0 +1,24 @@
+name: streamlit-r-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # 1. Cài đặt Python và thư viện Python
+  - python=3.9
+  - streamlit
+  - pandas
+  - openai
+  
+  # 2. Cài đặt R Core
+  - r-base=4.3
+  
+  # 3. Cài đặt các thư viện R (Pre-compiled binaries)
+  # Conda tự động xử lý các dependencies hệ thống (libssl, libfont, v.v.)
+  - r-ggplot2
+  - r-dplyr
+  - r-gtsummary
+  - r-survival
+  - r-survminer
+  - r-flextable
+  - r-remotes
+  - r-essentials
