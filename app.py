@@ -11,6 +11,35 @@ from io import BytesIO
 import json
 import re
 
+# Install R packages on first run
+def install_r_packages():
+    """Install required R packages on first run"""
+    packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
+    
+    for pkg in packages:
+        try:
+            check_cmd = f'Rscript -e "if (!require(\'{pkg}\', quietly=TRUE)) quit(status=1)"'
+            result = subprocess.run(check_cmd, shell=True, capture_output=True)
+            
+            if result.returncode != 0:
+                st.info(f"Installing R package: {pkg}...")
+                install_cmd = f'Rscript -e "install.packages(\'{pkg}\', repos=\'http://cran.rstudio.com/\', quiet=TRUE)"'
+                subprocess.run(install_cmd, shell=True, check=True, timeout=300)
+        except Exception as e:
+            st.warning(f"Could not install {pkg}: {str(e)}")
+
+# Check and install R packages before setting page config
+if 'r_packages_checked' not in st.session_state:
+    st.session_state.r_packages_checked = False
+
+if not st.session_state.r_packages_checked:
+    # Create a temporary container for installation messages
+    placeholder = st.empty()
+    with placeholder.container():
+        st.info("⏳ Setting up R environment... This may take 2-3 minutes on first deployment.")
+        install_r_packages()
+    placeholder.empty()
+    st.session_state.r_packages_checked = True
 
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
