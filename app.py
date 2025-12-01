@@ -1,55 +1,3 @@
-import streamlit as st import pandas as pd import openai import subprocess import tempfile import os import warnings import datetime import base64 from io import BytesIO import json import re st.set_page_config( page_title="Ask Your CSV (R Edition)", page_icon="📊", la
-
-pasted
-
-sử dụng code này khi deploy streamlit app, không chạy được R code thì thiếu library
-
-Khi deploy Streamlit app lên cloud (như Streamlit Cloud, Heroku, etc.), bạn cần đảm bảo R và các package R được cài đặt. Dưới đây là hướng dẫn chi tiết:
-
-1. Tạo file packages.txt (cho Streamlit Cloud)
-txt
-r-base
-r-base-dev
-2. Tạo file install_r_packages.R
-r
-# Install required R packages
-install.packages(c(
-  "ggplot2",
-  "dplyr",
-  "gtsummary",
-  "survival",
-  "survminer",
-  "flextable"
-), repos = "https://cloud.r-project.org/")
-3. Tạo file requirements.txt
-txt
-streamlit
-pandas
-openai
-4. Tạo file setup.sh (nếu cần)
-bash
-#!/bin/bash
-
-# Install R packages
-Rscript install_r_packages.R
-5. Cập nhật code để kiểm tra và hướng dẫn cài đặt
-Tôi sẽ tạo phiên bản cải tiến của app với khả năng kiểm tra dependencies tốt hơn:
-
-Continue
-
-Streamlit CSV Analyzer with R - Enhanced Deployment
-Code 
-
-
-How can I help you today?
-
-Session limit reached ∙ resets 12:00 AM
-Upgrade
-
-
-
-
-
 import streamlit as st
 import pandas as pd
 import openai
@@ -309,7 +257,7 @@ Requirements:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are an R debugging expert. Fix the code and return ONLY the corrected R code."},
                 {"role": "user", "content": fix_prompt}
