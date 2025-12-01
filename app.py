@@ -12,35 +12,100 @@ import json
 import re
 
 # Install R packages on first run
-def install_r_packages():
-    """Install required R packages on first run"""
-    packages = ['ggplot2', 'dplyr', 'gtsummary', 'survival', 'survminer', 'flextable']
+def run_r_code(code, df, output_dir):
+    """Execute R code and return results"""
+    # Save dataframe to temp CSV for R to read
+    csv_path = os.path.join(output_dir, "temp_data.csv")
+    df.to_csv(csv_path, index=False)
     
-    for pkg in packages:
-        try:
-            check_cmd = f'Rscript -e "if (!require(\'{pkg}\', quietly=TRUE)) quit(status=1)"'
-            result = subprocess.run(check_cmd, shell=True, capture_output=True)
-            
-            if result.returncode != 0:
-                st.info(f"Installing R package: {pkg}...")
-                install_cmd = f'Rscript -e "install.packages(\'{pkg}\', repos=\'http://cran.rstudio.com/\', quiet=TRUE)"'
-                subprocess.run(install_cmd, shell=True, check=True, timeout=300)
-        except Exception as e:
-            st.warning(f"Could not install {pkg}: {str(e)}")
+    # Normalize path for R (use forward slashes)
+    csv_path_r = csv_path.replace("\\", "/")
+    
+    # Detect which libraries are needed based on code content
+    libraries_needed = []
+    if 'ggplot' in code or 'geom_' in code or 'aes(' in code:
+        libraries_needed.append('ggplot2')
+    if any(func in code for func in ['filter(', 'mutate(', 'select(', 'summarize(', 'group_by(', '%>%']):
+        libraries_needed.append('dplyr')
+    if 'tbl_' in code or 'gtsummary' in code:
+        libraries_needed.append('gtsummary')
+    if 'Surv(' in code or 'coxph(' in code or 'survfit(' in code:
+        libraries_needed.append('survival')
+    if 'ggsurvplot' in code:
+        libraries_needed.append('survminer')
+    if 'flextable' in code or 'as_flex_table' in code or 'save_as_html' in code:
+        libraries_needed.append('flextable')
+    
+    # Create library installation and loading code
+    library_code = ""
+    for lib in set(libraries_needed):
+        library_code += f"""
+if (!require("{lib}", quietly = TRUE)) {{
+    install.packages("{lib}", repos = "http://cran.rstudio.com/", quiet = TRUE)
+    library({lib})
+}} else {{
+    suppressPackageStartupMessages(library({lib}))
+}}
+"""
+    
+    # Create R script with data loading
+    r_script = f"""
+# Load data
+df <- read.csv("{csv_path_r}")
 
-# Check and install R packages before setting page config
-if 'r_packages_checked' not in st.session_state:
-    st.session_state.r_packages_checked = False
+# Install and load required libraries
+{library_code}
 
-if not st.session_state.r_packages_checked:
-    # Create a temporary container for installation messages
-    placeholder = st.empty()
-    with placeholder.container():
-        st.info("⏳ Setting up R environment... This may take 2-3 minutes on first deployment.")
-        install_r_packages()
-    placeholder.empty()
-    st.session_state.r_packages_checked = True
-
+# User code
+{code}
+"""
+    
+    # Save R script
+    script_path = os.path.join(output_dir, "script.R")
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(r_script)
+    
+    try:
+        # Run R script
+        result = subprocess.run(
+            ['Rscript', script_path],
+            capture_output=True,
+            text=True,
+            timeout=120,  # Tăng timeout lên 120s cho việc install packages
+            cwd=output_dir
+        )
+        
+        return {
+            'success': result.returncode == 0,
+            'stdout': result.stdout,
+            'stderr': result.stderr,
+            'output_dir': output_dir,
+            'code': code
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': 'Execution timed out (120s limit). This may happen during first run while installing R packages.',
+            'output_dir': output_dir,
+            'code': code
+        }
+    except FileNotFoundError:
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': 'R is not installed or not in PATH. Please install R from https://www.r-project.org/',
+            'output_dir': output_dir,
+            'code': code
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'stdout': '',
+            'stderr': str(e),
+            'output_dir': output_dir,
+            'code': code
+        }
 st.set_page_config(
     page_title="Ask Your CSV (R Edition)",
     page_icon="📊",
