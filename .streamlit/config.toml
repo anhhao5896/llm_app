@@ -1,11 +1,14 @@
 [server]
+enableXsrfProtection = false
 maxUploadSize = 200
-enableCORS = false
-enableXsrfProtection = true
+runOnSave = false
 
 [browser]
 gatherUsageStats = false
 
 [runner]
+fastReruns = false
 magicEnabled = false
-fastReruns = true
+
+[client]
+toolbarMode = "minimal"
