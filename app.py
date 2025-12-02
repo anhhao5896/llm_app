@@ -815,7 +815,6 @@ st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: gray; font-size: 12px;'>
 💡 Powered by R, ggplot2, gtsummary, survminer, and flextable | 
-🔒 Your data stays private and is not stored |
-⚙️ Requires R and packages (ggplot2, dplyr, gtsummary, survival, survminer, flextable) installed
+🔒 Your data stays private and is not stored
 </div>
 """, unsafe_allow_html=True)
