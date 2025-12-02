@@ -86,52 +86,70 @@ def check_r_environment():
     except Exception as e:
         return False, str(e)
 
+# --- CẬP NHẬT HÀM NÀY ĐỂ FIX LỖI PANDOC ---
 def run_r_code(code, df, output_dir):
-    # ... (Giữ nguyên phần lưu CSV và tạo script.R) ...
-    # Copy lại đoạn đầu hàm cũ của bạn:
+    """Execute R code and return results"""
+    # 1. Chuẩn bị dữ liệu
     csv_path = os.path.join(output_dir, "temp_data.csv")
     df.to_csv(csv_path, index=False)
+    
     csv_path_r = csv_path.replace("\\", "/")
     output_dir_r = output_dir.replace("\\", "/")
     
+    # 2. Tự động tìm đường dẫn thư mục bin của Conda (Nơi chứa Pandoc)
+    # Vì Python, R, và Pandoc cùng nằm trong 1 thư mục bin của Conda
+    conda_bin_dir = os.path.dirname(sys.executable)
+    
+    # 3. Tạo R Script với cấu hình Pandoc cưỡng bức
     r_script = f"""
-    setwd("{output_dir_r}")
-    df <- read.csv("{csv_path_r}")
-    suppressPackageStartupMessages({{
-        library(ggplot2)
-        library(dplyr)
-        library(gtsummary)
-        library(survival)
-        library(survminer)
-        library(flextable)
-    }})
-    {code}
-    """
+# --- CONFIG PANDOC (BẮT BUỘC) ---
+# Ép R tìm Pandoc trong cùng thư mục với Python/R
+conda_dir <- "{conda_bin_dir}"
+Sys.setenv(RSTUDIO_PANDOC = conda_dir)
+Sys.setenv(PATH = paste(conda_dir, Sys.getenv("PATH"), sep=":"))
+
+# Setup working dir
+setwd("{output_dir_r}")
+df <- read.csv("{csv_path_r}")
+
+# Load Libraries
+suppressPackageStartupMessages({{
+    library(ggplot2)
+    library(dplyr)
+    library(gtsummary)
+    library(survival)
+    library(survminer)
+    library(flextable)
+    library(broom.helpers) # Đã cài thêm
+}})
+
+# User Code
+{code}
+"""
+    
     script_path = os.path.join(output_dir, "script.R")
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write(r_script)
     
-    # --- PHẦN QUAN TRỌNG NHẤT: GỌI SUBPROCESS ---
-    
-    # Lấy đường dẫn tuyệt đối đã tìm được
+    # 4. Tìm R executable (như logic cũ)
     r_exec = st.session_state.get('r_path')
-    if not r_exec: r_exec = get_r_path() # Tìm lại nếu chưa có
+    if not r_exec: 
+        r_exec = get_r_path() # Hàm này bạn đã có ở bước trước
     
     if not r_exec:
         return {
-            'success': False,
-            'stdout': '',
-            'stderr': 'CRITICAL: Rscript not found. Check environment.yml',
-            'output_dir': output_dir,
+            'success': False, 
+            'stderr': 'CRITICAL: Rscript not found.',
             'code': code
         }
 
     try:
+        # Run R script
         result = subprocess.run(
-            [r_exec, script_path], # <--- KHÔNG DÙNG 'Rscript', DÙNG r_exec
+            [r_exec, script_path],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=120, # Tăng timeout lên 2 phút cho chắc
             cwd=output_dir
         )
         
@@ -146,7 +164,7 @@ def run_r_code(code, df, output_dir):
         return {
             'success': False,
             'stdout': '',
-            'stderr': f"Subprocess Error: {str(e)}",
+            'stderr': str(e),
             'output_dir': output_dir,
             'code': code
         }
