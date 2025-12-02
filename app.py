@@ -227,7 +227,7 @@ Requirements:
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4.1",
             messages=[
                 {"role": "system", "content": "You are an R debugging expert. Fix the code and return ONLY the corrected R code."},
                 {"role": "user", "content": fix_prompt}
@@ -609,7 +609,6 @@ if st.session_state.df is not None:
         library(gtsummary)
         library(flextable)
         
-        model <- coxph(Surv(time, status) ~ age + sex, data = df)
         
         # Create and save table as HTML (CORRECT SYNTAX)
         table <- tbl_regression(model, exponentiate = TRUE)
@@ -625,13 +624,6 @@ if st.session_state.df is not None:
         
         Example for Kaplan-Meier plots:
         ```r
-        # Kaplan-Meier survival analysis
-        library(survival)
-        library(survminer)
-        
-        # Fit survival model
-        km_fit <- survfit(Surv(time, status) ~ treatment, data = df)
-        
         # Create plot with ggsurvplot
         p <- ggsurvplot(
           km_fit,
@@ -675,7 +667,7 @@ if st.session_state.df is not None:
                     messages.append({"role": "user", "content": user_input})
                     
                     response = client.chat.completions.create(
-                        model="gpt-4o",
+                        model="gpt-4.1",
                         messages=messages,
                         temperature=0.1,
                         max_tokens=1500
