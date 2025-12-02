@@ -36,48 +36,45 @@ def fix_r_code(code, error_msg):
     return fixed_code
 
 # Helper function to run R code
-# --- CẬP NHẬT ĐOẠN NÀY TRONG APP.PY ---
-
-# --- Thay thế đoạn code tương ứng trong app.py của bạn ---
 
 def get_r_path():
     """
-    Tìm đường dẫn tuyệt đối của Rscript dựa trên vị trí Python.
-    Đây là cách duy nhất hoạt động ổn định trên Streamlit Cloud Conda.
+    Find the absolute path of Rscript based on the Python location.
+    This is the only method that works reliably on Streamlit Cloud Conda.
     """
-    # 1. Lấy thư mục chứa file python hiện tại (VD: /home/user/.conda/envs/env/bin)
+    # 1. Get the directory containing the current Python executable (e.g., /home/user/.conda/envs/env/bin)
     python_dir = os.path.dirname(sys.executable)
     
-    # 2. Tạo đường dẫn tuyệt đối tới Rscript
+    # 2. Construct the absolute path to Rscript
     r_path = os.path.join(python_dir, "Rscript")
     
-    # 3. Kiểm tra tồn tại
+    # 3. Check for existence
     if os.path.exists(r_path):
         return r_path
     
-    # Fallback: Nếu chạy local trên Windows thì có thể là Rscript.exe
+    # Fallback: If running locally on Windows, it might be Rscript.exe
     if os.path.exists(r_path + ".exe"):
         return r_path + ".exe"
         
-    # Fallback cuối cùng: Thử các đường dẫn Linux tiêu chuẩn
+    # Final fallback: Try standard Linux paths
     if os.path.exists("/usr/bin/Rscript"): return "/usr/bin/Rscript"
     if os.path.exists("/usr/local/bin/Rscript"): return "/usr/local/bin/Rscript"
     
     return None
 
 def check_r_environment():
-    """Kiểm tra R có chạy được không bằng đường dẫn tuyệt đối"""
+    """Check if R can run using the absolute path."""
     r_path = get_r_path()
     
     if not r_path:
         return False, f"❌ Cannot find Rscript. Python is at: {sys.executable}"
         
     try:
-        # Lưu đường dẫn tìm được vào session state để dùng cho các hàm khác
+        # Save the found path to session state for use in other functions
         st.session_state['r_path'] = r_path
         
         result = subprocess.run(
-            [r_path, '--version'], # <--- Dùng đường dẫn tuyệt đối
+            [r_path, '--version'], # <--- Use absolute path
             capture_output=True,
             text=True,
             timeout=5
@@ -86,24 +83,24 @@ def check_r_environment():
     except Exception as e:
         return False, str(e)
 
-# --- CẬP NHẬT HÀM NÀY ĐỂ FIX LỖI PANDOC ---
+# --- UPDATE THIS FUNCTION TO FIX PANDOC ERROR ---
 def run_r_code(code, df, output_dir):
     """Execute R code and return results"""
-    # 1. Chuẩn bị dữ liệu
+    # 1. Prepare data
     csv_path = os.path.join(output_dir, "temp_data.csv")
     df.to_csv(csv_path, index=False)
     
     csv_path_r = csv_path.replace("\\", "/")
     output_dir_r = output_dir.replace("\\", "/")
     
-    # 2. Tự động tìm đường dẫn thư mục bin của Conda (Nơi chứa Pandoc)
-    # Vì Python, R, và Pandoc cùng nằm trong 1 thư mục bin của Conda
+    # 2. Automatically find the Conda 'bin' directory (Where Pandoc is located)
+    # Since Python, R, and Pandoc are all located in the same Conda 'bin' directory
     conda_bin_dir = os.path.dirname(sys.executable)
     
-    # 3. Tạo R Script với cấu hình Pandoc cưỡng bức
+    # 3. Create R Script with forced Pandoc configuration
     r_script = f"""
-# --- CONFIG PANDOC (BẮT BUỘC) ---
-# Ép R tìm Pandoc trong cùng thư mục với Python/R
+# --- PANDOC CONFIG (MANDATORY) ---
+# Force R to find Pandoc in the same directory as Python/R
 conda_dir <- "{conda_bin_dir}"
 Sys.setenv(RSTUDIO_PANDOC = conda_dir)
 Sys.setenv(PATH = paste(conda_dir, Sys.getenv("PATH"), sep=":"))
