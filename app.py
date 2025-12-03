@@ -117,7 +117,7 @@ suppressPackageStartupMessages({{
     library(survival)
     library(survminer)
     library(flextable)
-    library(broom.helpers) # Đã cài thêm
+    library(broom.helpers) 
 }})
 
 # User Code
@@ -146,7 +146,7 @@ suppressPackageStartupMessages({{
             [r_exec, script_path],
             capture_output=True,
             text=True,
-            timeout=120, # Tăng timeout lên 2 phút cho chắc
+            timeout=120, # Increase timeout to 2 minutes
             cwd=output_dir
         )
         
