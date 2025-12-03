@@ -128,10 +128,10 @@ suppressPackageStartupMessages({{
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write(r_script)
     
-    # 4. Tìm R executable (như logic cũ)
+    # 4. Find R executable 
     r_exec = st.session_state.get('r_path')
     if not r_exec: 
-        r_exec = get_r_path() # Hàm này bạn đã có ở bước trước
+        r_exec = get_r_path()
     
     if not r_exec:
         return {
